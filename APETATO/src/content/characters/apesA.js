@@ -15,7 +15,7 @@ export const APES_A = deepFreeze([
     id: 'kong_grunt',
     name: 'Kong Grunt',
     description: 'A wall of muscle with a banana budget. Hits like rent day, moves like a landmark.',
-    statMods: { maxHp: 15, armor: 4, knockback: 6, speed: -10, attackSpeed: -10 },
+    statMods: { maxHp: 15, armor: 4, knockback: 6, speed: -5, attackSpeed: -5 },
     passives: [
       { trigger: 'onTakeDamage', chance: 25, do: [{ op: 'shield', amount: 2 }] },
     ],

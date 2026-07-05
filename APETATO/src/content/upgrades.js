@@ -123,7 +123,7 @@ export const UPGRADES = deepFreeze([
     name: 'Grabby Aura',
     rarity: 0,
     weight: 10,
-    statMods: { pickupRange: 5 },
+    statMods: { pickupRange: 15 },
     description: 'Loot rolls uphill toward you now.',
   },
   {
@@ -229,7 +229,7 @@ export const UPGRADES = deepFreeze([
     name: 'Scavenger Sense',
     rarity: 1,
     weight: 5,
-    statMods: { coinGain: 4, pickupRange: 5 },
+    statMods: { coinGain: 4, pickupRange: 20 },
     description: 'One ape\u2019s trash is your entire retirement plan.',
   },
   {
