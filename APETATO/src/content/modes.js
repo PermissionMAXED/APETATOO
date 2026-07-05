@@ -25,7 +25,7 @@ export const RULE_DEFAULTS = Object.freeze({
   eliteMult: 1,
   xpMult: 1,
   coinMult: 1,
-  startCoins: 0,
+  startCoins: 20,
   hardcore: false,
   chaosWaveModifiers: false,
   bananaRain: false,

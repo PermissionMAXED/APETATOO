@@ -3,9 +3,9 @@
 // via save.persist() (500ms in core/save.js), so hot events like enemy:death
 // never thrash localStorage.
 //
-// bestWave is tracked per modeId here (the meta contract); note that
-// save.recordRun (if the game also calls it) tracks bestWave per characterId
-// in the same map — mode ids and character ids never collide.
+// bestWave is tracked BOTH per modeId and per characterId in the same map
+// (mode ids and character ids never collide). This tracker is the single
+// accumulator for lifetime stats — save.recordRun only appends run history.
 
 /**
  * Wire lifetime stat accumulation. Call once at boot (from initMeta).
@@ -48,6 +48,9 @@ export function initStatsTracker(bus, save) {
     const modeId = (lastRunStart && lastRunStart.modeId) || 'classic';
     const wave = Number(p.wave ?? runStats.wave) || 0;
     if (wave > (s().bestWave[modeId] || 0)) s().bestWave[modeId] = wave;
+    // Also track per character (mode ids and character ids never collide).
+    const charId = p.characterId || (lastRunStart && lastRunStart.characterId);
+    if (charId && wave > (s().bestWave[charId] || 0)) s().bestWave[charId] = wave;
 
     save.persist();
   });

@@ -131,6 +131,22 @@ export function initMeta({ bus, save }) {
     save.persist();
     bus.emit('meta:reward', { bananas });
 
+    // History entry only — recordRun never touches stats/goldenBananas
+    // (this listener and statsTracker are the single accumulators).
+    if (typeof save.recordRun === 'function') {
+      save.recordRun({
+        win: !!p.victory,
+        wave,
+        kills,
+        coins: Number(runStats.coinsEarned) || 0,
+        timeSec: Number(runStats.timeSec) || 0,
+        characterId: p.characterId || (lastRunStart && lastRunStart.characterId) || 'unknown',
+        mode: modeId,
+        arena: p.arenaId || (lastRunStart && lastRunStart.arenaId) || '',
+        goldenBananas: bananas,
+      });
+    }
+
     evaluateUnlocks();
   });
 

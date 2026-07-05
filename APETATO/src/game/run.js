@@ -195,7 +195,17 @@ export function createGame({ bus, states, save, input, renderApi }) {
     if (startWeapon) addWeapon(state, player, startWeapon);
 
     renderApi.beginRun(renderArenaDef(arena));
-    bus.emit('run:start', { modeId, character, seed, arena });
+    // Contract: meta listeners need characterId/arenaId/customRules (daily
+    // practice detection, custom-run banana zeroing, chars-tried tracking).
+    bus.emit('run:start', {
+      modeId,
+      characterId: character.id,
+      character,
+      seed,
+      arenaId: arena.id,
+      arena,
+      customRules: cfg.customRules || null,
+    });
 
     beginWave(1);
     states.set('PLAYING');
@@ -362,7 +372,15 @@ export function createGame({ bus, states, save, input, renderApi }) {
     state.over = true;
     state.victory = !!victory;
     stopWaveSpawning(state);
-    bus.emit('run:end', { victory: state.victory, runStats: state.runStats, wave: state.wave });
+    bus.emit('run:end', {
+      victory: state.victory,
+      runStats: state.runStats,
+      wave: state.wave,
+      modeId: state.modeId,
+      characterId: (state.players[0] && state.players[0].character && state.players[0].character.id) || '',
+      arenaId: state.arena.id,
+      timeSec: state.timeSec,
+    });
     states.set(victory ? 'VICTORY' : 'GAME_OVER');
   }
 
@@ -519,6 +537,10 @@ export function createGame({ bus, states, save, input, renderApi }) {
         victory: false,
         runStats: state.runStats,
         wave: state.wave,
+        modeId: state.modeId,
+        characterId: (state.players[0] && state.players[0].character && state.players[0].character.id) || '',
+        arenaId: state.arena.id,
+        timeSec: state.timeSec,
         abandoned: true,
       });
     }

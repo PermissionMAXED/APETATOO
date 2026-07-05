@@ -132,28 +132,17 @@ export function initSave() {
     },
 
     /**
-     * Record a completed run and roll its numbers into lifetime stats.
+     * Record a completed run into runsHistory ONLY.
      * Expected summary shape (all optional, extra fields are kept):
      *   { win, wave, kills, coins, timeSec, characterId, mode, arena,
      *     goldenBananas }
-     * bestWave is tracked per characterId. goldenBananas earned during the
-     * run should be included here — recordRun is the single point that
-     * credits them (meta/progression must not double-add).
+     * IMPORTANT: lifetime stats (totalRuns/totalKills/wins/playtime/coins/
+     * bestWave) and goldenBananas are accumulated exclusively by the meta
+     * trackers (src/meta/statsTracker.js + src/meta/progression.js) from bus
+     * events. recordRun must never mutate them or runs would double-count.
+     * Any goldenBananas field on the summary is informational history data.
      */
     recordRun(summary = {}) {
-      const s = save.data.stats;
-      s.totalRuns += 1;
-      s.totalKills += Number(summary.kills) || 0;
-      if (summary.win) s.wins += 1;
-      s.playtimeSec += Number(summary.timeSec) || 0;
-      s.coinsEarned += Number(summary.coins) || 0;
-
-      const charKey = summary.characterId || 'unknown';
-      const wave = Number(summary.wave) || 0;
-      if (wave > (s.bestWave[charKey] || 0)) s.bestWave[charKey] = wave;
-
-      save.data.goldenBananas += Number(summary.goldenBananas) || 0;
-
       save.data.runsHistory.push({ at: Date.now(), ...summary });
       if (save.data.runsHistory.length > RUNS_HISTORY_MAX) {
         save.data.runsHistory.splice(0, save.data.runsHistory.length - RUNS_HISTORY_MAX);

@@ -27,6 +27,7 @@ const RARITY_FLOORS = [12, 25, 55, 95, 160];
 const OPEN_EV = { wave: 0, stock: null };
 const BUY_EV = { kind: '', id: '', price: 0 };
 const REROLL_EV = { cost: 0 };
+const SPEND_EV = { amount: 0, total: 0 };
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -244,6 +245,9 @@ export function buy(state, slotIdx) {
   BUY_EV.id = slot.def.id;
   BUY_EV.price = slot.price;
   state.bus.emit('shop:buy', BUY_EV);
+  SPEND_EV.amount = slot.price;
+  SPEND_EV.total = state.coins;
+  state.bus.emit('coin:spend', SPEND_EV);
   return true;
 }
 
@@ -289,6 +293,9 @@ export function reroll(state) {
   }
   REROLL_EV.cost = cost;
   state.bus.emit('shop:reroll', REROLL_EV);
+  SPEND_EV.amount = cost;
+  SPEND_EV.total = state.coins;
+  state.bus.emit('coin:spend', SPEND_EV);
   return true;
 }
 

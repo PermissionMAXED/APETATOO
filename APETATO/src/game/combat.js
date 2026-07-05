@@ -24,7 +24,7 @@ const HIT_EV = { ent: null, damage: 0, crit: false, weaponId: '', x: 0, z: 0, ki
 const CRIT_EV = { damage: 0, x: 0, z: 0 };
 const PHIT_EV = { damage: 0, source: null };
 const DODGE_EV = { player: null, x: 0, z: 0 };
-const DEATH_EV = { ent: null, def: null, x: 0, z: 0 };
+const DEATH_EV = { ent: null, def: null, x: 0, z: 0, elite: false, cause: '', damage: 0, maxHp: 0 };
 const EXPL_EV = { x: 0, z: 0, radius: 0 };
 const ROLL = { damage: 0, crit: false };
 
@@ -155,7 +155,7 @@ export function applyWeaponHit(state, player, w, ent, mult) {
   fireTriggerFast('onHit', player, state, ent, dmg, w);
   if (crit) fireTriggerFast('onCrit', player, state, ent, dmg, w);
 
-  if (ent.hp <= 0 && !ent.dead) killEnemy(state, ent, player);
+  if (ent.hp <= 0 && !ent.dead) killEnemy(state, ent, player, '', dmg);
   return dmg;
 }
 
@@ -194,7 +194,7 @@ export function applyDirectDamage(state, ent, dmg, kind, weaponRef) {
     state.bus.emit('enemy:hit', HIT_EV);
     HIT_EV.ent = null;
   }
-  if (ent.hp <= 0 && !ent.dead) killEnemy(state, ent, state.players[0]);
+  if (ent.hp <= 0 && !ent.dead) killEnemy(state, ent, state.players[0], kind, dmg);
 }
 
 /**
@@ -228,8 +228,10 @@ export function explodeFromPlayer(state, player, x, z, radius, damage, weaponRef
   explodeDepth--;
 }
 
-/** Enemy death: splits, elite effects, drops, stats, events, pool release. */
-export function killEnemy(state, ent, killer) {
+/** Enemy death: splits, elite effects, drops, stats, events, pool release.
+ * `cause` labels the killing source ('thorns', 'poison'...) and `dmg` is the
+ * killing blow — both flow into the 'enemy:death' payload (achievements). */
+export function killEnemy(state, ent, killer, cause, dmg) {
   if (ent.dead) return;
   ent.dead = true;
   ent.hp = 0;
@@ -262,6 +264,10 @@ export function killEnemy(state, ent, killer) {
   DEATH_EV.def = def;
   DEATH_EV.x = ent.x;
   DEATH_EV.z = ent.z;
+  DEATH_EV.elite = !!ent.elite;
+  DEATH_EV.cause = cause || '';
+  DEATH_EV.damage = dmg || 0;
+  DEATH_EV.maxHp = ent.maxHp || 0;
   state.bus.emit('enemy:death', DEATH_EV);
   DEATH_EV.ent = null;
   DEATH_EV.def = null;
@@ -328,9 +334,9 @@ export function damagePlayer(state, player, amount, source, opts) {
   state.bus.emit('player:hit', PHIT_EV);
   PHIT_EV.source = null;
 
-  // Thorns reflect to contact attackers.
+  // Thorns reflect to contact attackers ('thorns' cause feeds achievements).
   if (opts && opts.contact && source && source.kind === 'enemy' && stats.thorns > 0) {
-    applyDirectDamage(state, source, stats.thorns, 'normal', null);
+    applyDirectDamage(state, source, stats.thorns, 'thorns', null);
   }
   // Elite on-hit effects proc when the elite lands a hit.
   if (source && source.elite) fireEnemyTrigger(state, source, 'onHit', player);

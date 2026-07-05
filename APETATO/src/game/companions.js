@@ -15,6 +15,18 @@ import { acquire, release } from './entities.js';
 import { applyWeaponHit, applyDirectDamage, weaponCooldown, weaponRange } from './combat.js';
 
 const FIND_Q = []; // scratch for target queries (single-threaded update)
+const PET_EV = { count: 0 };
+
+/** Emit 'pet:spawn' with the absolute live companion count (achievements). */
+function emitPetCount(state) {
+  const all = state.stores.companions.all;
+  let n = 0;
+  for (let i = 0; i < all.length; i++) {
+    if (all[i].active) n++;
+  }
+  PET_EV.count = n;
+  state.bus.emit('pet:spawn', PET_EV);
+}
 
 // ---------------------------------------------------------------------------
 // Built-in summon specs (models render as animated groups via def.model)
@@ -96,6 +108,7 @@ export function summonCompanion(state, player, what, max, sourceId) {
   c.dmg = spec.damage;
   c.attackCd = 0;
   c.ttl = spec.duration || 0; // 0 = lives until the wave ends
+  emitPetCount(state);
   return c;
 }
 
@@ -129,6 +142,7 @@ export function deployTurret(state, player, w) {
   c.maxHp = 20;
   c.aiX = params.turretFireRate || 0.8; // seconds between shots
   c.ttl = 0;
+  emitPetCount(state);
   return c;
 }
 
@@ -156,6 +170,7 @@ export function ensurePet(state, player, w) {
   c.maxHp = c.hp;
   c.speed = params.petSpeed || 7;
   c.ttl = 0;
+  emitPetCount(state);
   return c;
 }
 

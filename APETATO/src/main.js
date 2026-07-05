@@ -46,6 +46,7 @@ window.APETATO_DEBUG = {
   states,
   save,
   input,
+  game,
   runSelfTests() {
     const results = {
       bus: busSelfTest(),

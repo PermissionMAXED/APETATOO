@@ -44,17 +44,21 @@ export function spawnBoss(state, def, isMini) {
   ent.z = 0;
   ent.radius = def.radius || 1;
   let hpScale = Math.sqrt(Math.max(1, s.hp)) * (isMini ? 0.7 : 1);
+  let dmgScale = s.dmg;
   if (state.modeRules.bossRush) {
-    // Boss Rush serves a boss every wave: ramp HP with run progress so the
-    // wave-1 boss is beatable with a starter weapon.
+    // Boss Rush serves a boss every wave: ramp HP AND damage with run
+    // progress so the wave-1 boss is beatable (and survivable) with a
+    // starter weapon and level-1 HP.
     const finalWave = state.modeRules.waves || 8;
-    hpScale *= 0.25 + 0.75 * Math.min(1, state.wave / finalWave);
+    const t = Math.min(1, state.wave / finalWave);
+    hpScale *= 0.25 + 0.75 * t;
+    dmgScale *= 0.45 + 0.55 * t;
   }
   ent.maxHp = Math.max(1, Math.round((def.hp || 500) * hpScale));
   ent.hp = ent.maxHp;
   ent.speed = (def.speed || 2) * Math.min(1.15, s.spd);
-  ent.dmg = Math.max(1, Math.round((def.damage || 8) * s.dmg));
-  ent.mult = s.dmg;
+  ent.dmg = Math.max(1, Math.round((def.damage || 8) * dmgScale));
+  ent.mult = dmgScale;
   ent.xpValue = def.xp || 40;
 
   const boss = {

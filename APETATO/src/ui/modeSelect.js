@@ -18,13 +18,15 @@ export function createModeSelect(ctx) {
   let customPanel = null;
   let startBtn = null;
 
+  // Keys mirror RULE_DEFAULTS in src/content/modes.js — resolveRules() only
+  // honors known rule keys, so these names must match exactly.
   const custom = {
     waves: 20,
-    enemyHp: 1,
-    enemyDmg: 1,
-    spawn: 1,
-    xp: 1,
-    coin: 1,
+    enemyHpMult: 1,
+    enemyDmgMult: 1,
+    spawnMult: 1,
+    xpMult: 1,
+    coinMult: 1,
     startCoins: 0,
     weaponSlots: 6,
     seed: '',
@@ -140,11 +142,11 @@ export function createModeSelect(ctx) {
       if (custom.seed.trim()) cfg.seed = custom.seed.trim();
       cfg.customRules = {
         waves: custom.waves,
-        enemyHp: custom.enemyHp,
-        enemyDmg: custom.enemyDmg,
-        spawn: custom.spawn,
-        xp: custom.xp,
-        coin: custom.coin,
+        enemyHpMult: custom.enemyHpMult,
+        enemyDmgMult: custom.enemyDmgMult,
+        spawnMult: custom.spawnMult,
+        xpMult: custom.xpMult,
+        coinMult: custom.coinMult,
         startCoins: custom.startCoins,
         weaponSlots: custom.weaponSlots,
       };
@@ -246,11 +248,11 @@ export function createModeSelect(ctx) {
     const x = (v) => v.toFixed(1) + '×';
     sliderRow(form, 'Waves', 5, 40, 1, custom.waves, (v) => (custom.waves = v));
     sliderRow(form, 'Weapon slots', 1, 6, 1, custom.weaponSlots, (v) => (custom.weaponSlots = v));
-    sliderRow(form, 'Enemy HP', 0.5, 3, 0.1, custom.enemyHp, (v) => (custom.enemyHp = v), x);
-    sliderRow(form, 'Enemy damage', 0.5, 3, 0.1, custom.enemyDmg, (v) => (custom.enemyDmg = v), x);
-    sliderRow(form, 'Spawn rate', 0.5, 3, 0.1, custom.spawn, (v) => (custom.spawn = v), x);
-    sliderRow(form, 'XP gain', 0.5, 3, 0.1, custom.xp, (v) => (custom.xp = v), x);
-    sliderRow(form, 'Coin gain', 0.5, 3, 0.1, custom.coin, (v) => (custom.coin = v), x);
+    sliderRow(form, 'Enemy HP', 0.5, 3, 0.1, custom.enemyHpMult, (v) => (custom.enemyHpMult = v), x);
+    sliderRow(form, 'Enemy damage', 0.5, 3, 0.1, custom.enemyDmgMult, (v) => (custom.enemyDmgMult = v), x);
+    sliderRow(form, 'Spawn rate', 0.5, 3, 0.1, custom.spawnMult, (v) => (custom.spawnMult = v), x);
+    sliderRow(form, 'XP gain', 0.5, 3, 0.1, custom.xpMult, (v) => (custom.xpMult = v), x);
+    sliderRow(form, 'Coin gain', 0.5, 3, 0.1, custom.coinMult, (v) => (custom.coinMult = v), x);
     sliderRow(form, 'Start coins', 0, 200, 10, custom.startCoins, (v) => (custom.startCoins = v));
 
     const seedRow = mount(form, el('div', 'form-row'));

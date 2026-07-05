@@ -14,6 +14,8 @@ import { resolveArenaCollision } from './collision.js';
 import { STATUS_SLOTS } from './entities.js';
 
 const RECOMPUTE_EV = { player: null };
+const ITEM_EV = { id: '', rarity: 'common', item: null };
+const RARITY_NAMES = ['common', 'rare', 'epic', 'legendary', 'mythic'];
 const REGEN_PERIOD = 5; // 1 hp per `hpRegen` point every 5 seconds
 const LOWHP_REARM_PCT = 0.6;
 
@@ -178,6 +180,11 @@ export function addItem(state, player, itemDef, paidPrice) {
   }
   if (paidPrice !== undefined) player.itemPaid.set(id, paidPrice);
   recomputeStats(state, player);
+  ITEM_EV.id = id;
+  ITEM_EV.rarity = RARITY_NAMES[Math.max(0, Math.min(4, itemDef.rarity | 0))];
+  ITEM_EV.item = itemDef;
+  state.bus.emit('item:gain', ITEM_EV);
+  ITEM_EV.item = null;
   return true;
 }
 

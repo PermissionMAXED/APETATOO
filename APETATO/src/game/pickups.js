@@ -20,7 +20,7 @@ const COLLECT_DIST = 0.6;
 const CRATE_COINS = 20;
 
 const COLLECT_EV = { ptype: '', value: 0, x: 0, z: 0 };
-const COIN_EV = { amount: 0 };
+const COIN_EV = { amount: 0, total: 0 };
 
 const ARCHETYPES = {
   xp: 'xp_banana',
@@ -75,7 +75,7 @@ export function dropsForEnemy(state, ent) {
   if (xp > 0) spawnXpOrb(state, ent.x, ent.z, xp);
   const coinChance = def.coinChance || 0;
   if (coinChance > 0 && state.rng.next() < coinChance) {
-    spawnPickup(state, 'coin', ent.x + 0.3, ent.z, 1 + ((def.tier | 0) > 2 ? 1 : 0));
+    spawnPickup(state, 'coin', ent.x + 0.3, ent.z, 2 + ((def.tier | 0) > 2 ? 1 : 0));
   }
   if (state.rng.next() < HEAL_DROP_CHANCE) {
     spawnPickup(state, 'heal', ent.x - 0.3, ent.z, 2 + (def.tier | 0));
@@ -108,6 +108,7 @@ export function gainCoins(state, amount, x, z) {
   state.coins += gained;
   state.runStats.coinsEarned += gained;
   COIN_EV.amount = gained;
+  COIN_EV.total = state.coins;
   state.bus.emit('coin:gain', COIN_EV);
   return gained;
 }
