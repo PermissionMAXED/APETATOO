@@ -116,11 +116,24 @@ export function createGameover(ctx) {
     }
 
     // --- actions -------------------------------------------------------------
+    // Daily allows one scored attempt per day: retrying a daily run always
+    // routes to a practice run (customRules.practice → daily.js skips
+    // submission) and the button says so.
+    let retryCfg = session.lastRunConfig;
+    let retryLabel = 'Retry';
+    if (retryCfg && retryCfg.modeId === 'daily') {
+      if (!(retryCfg.customRules && retryCfg.customRules.practice)) {
+        retryCfg = { ...retryCfg, customRules: { ...(retryCfg.customRules || {}), practice: true } };
+      }
+      retryLabel = 'Retry (Practice)';
+    }
+
     const actions = mount(screen, el('div', 'screen-actions'));
-    const retry = mount(actions, btn('Retry', 'primary big autofocus', () => {
-      if (session.lastRunConfig) {
+    const retry = mount(actions, btn(retryLabel, 'primary big autofocus', () => {
+      if (retryCfg) {
+        session.lastRunConfig = retryCfg;
         try {
-          game.startRun(session.lastRunConfig);
+          game.startRun(retryCfg);
         } catch (err) {
           console.error('[ui] retry startRun failed:', err);
         }
@@ -128,7 +141,7 @@ export function createGameover(ctx) {
         states.set('CHAR_SELECT');
       }
     }));
-    if (!session.lastRunConfig) retry.disabled = true;
+    if (!retryCfg) retry.disabled = true;
     mount(actions, btn('New Run', '', () => states.set('CHAR_SELECT')));
     mount(actions, btn('Menu', '', () => states.set('MENU')));
 

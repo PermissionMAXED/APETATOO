@@ -2,8 +2,8 @@
 // plus particle accents. All meshes are preallocated at init and toggled
 // via .visible; spawning/updating allocates nothing.
 //
-// Types handled: 'hit', 'explosion', 'muzzle', 'telegraph', 'levelup',
-// 'pickup', 'nova', 'beam' (opts:{x2,z2}), 'aura'.
+// Types handled: 'hit', 'explosion', 'muzzle', 'flash', 'telegraph',
+// 'levelup', 'pickup', 'nova', 'beam' (opts:{x2,z2}), 'aura'.
 
 import * as THREE from 'three';
 
@@ -166,6 +166,10 @@ export function createVfx(scene, particles) {
         break;
       case 'muzzle':
         spawnFlash(x, z, o.radius || 0.22, 0.07, o.color || '#fff2b0');
+        break;
+      case 'flash':
+        // Generic brief pop (death punch, boss phase transitions).
+        spawnFlash(x, z, o.radius || 0.5, o.duration || 0.1, o.color || '#ffffff');
         break;
       case 'explosion': {
         const r = o.radius || 1.6;

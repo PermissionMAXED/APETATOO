@@ -16,15 +16,21 @@ import { applyWeaponHit, applyDirectDamage, weaponCooldown, weaponRange } from '
 
 const FIND_Q = []; // scratch for target queries (single-threaded update)
 const PET_EV = { count: 0 };
+const PET_DEATH_EV = { count: 0 };
+const PET_HIT_COOLDOWN = 0.6; // seconds between enemy contact hits on a pet
 
-/** Emit 'pet:spawn' with the absolute live companion count (achievements). */
-function emitPetCount(state) {
+function liveCompanionCount(state) {
   const all = state.stores.companions.all;
   let n = 0;
   for (let i = 0; i < all.length; i++) {
     if (all[i].active) n++;
   }
-  PET_EV.count = n;
+  return n;
+}
+
+/** Emit 'pet:spawn' with the absolute live companion count (achievements). */
+function emitPetCount(state) {
+  PET_EV.count = liveCompanionCount(state);
   state.bus.emit('pet:spawn', PET_EV);
 }
 
@@ -141,7 +147,7 @@ export function deployTurret(state, player, w) {
   c.hp = 20;
   c.maxHp = 20;
   c.aiX = params.turretFireRate || 0.8; // seconds between shots
-  c.ttl = 0;
+  c.ttl = (w.def.stats && w.def.stats.duration) || 0; // authored turret lifetime
   emitPetCount(state);
   return c;
 }
@@ -182,6 +188,46 @@ function nearestEnemy(state, x, z, radius) {
   return state.hash.nearest(x, z, radius, null);
 }
 
+/** Enemy contact pass for a companion (pets/buddy). Gated by c.fireCd. */
+function tickCompanionContact(state, c, dt) {
+  if (c.fireCd > 0) {
+    c.fireCd -= dt;
+    return;
+  }
+  const n = state.hash.query(c.x, c.z, c.radius + 0.12, FIND_Q);
+  for (let k = 0; k < n; k++) {
+    const ent = FIND_Q[k];
+    if (!ent || ent.kind !== 'enemy' || !(ent.dmg > 0)) continue;
+    c.fireCd = PET_HIT_COOLDOWN;
+    damageCompanion(state, c, ent.dmg);
+    break;
+  }
+}
+
+/** Damage a companion (enemy contact / AoE). Kills it at 0 hp. */
+export function damageCompanion(state, c, amount) {
+  if (!c.active || !(amount > 0)) return;
+  const w = c.weaponInst;
+  const params = (w && w.def.behaviorParams) || {};
+  if (params.ethereal) return; // spirit pets pass through harm
+  c.hp -= amount;
+  c.hitFlash = 0.15;
+  if (c.hp <= 0) killCompanion(state, c);
+}
+
+/** Enemy AoE at (x, z): also hits companions (pets and the buddy). */
+export function damageCompanionsInRadius(state, x, z, radius, dmg) {
+  const all = state.stores.companions.all;
+  for (let i = 0; i < all.length; i++) {
+    const c = all[i];
+    if (!c.active || (c.ai !== 'pet' && c.ai !== 'buddy')) continue;
+    const dx = c.x - x;
+    const dz = c.z - z;
+    const rr = radius + c.radius;
+    if (dx * dx + dz * dz <= rr * rr) damageCompanion(state, c, dmg);
+  }
+}
+
 function fireTurretShot(state, c, target) {
   const p = acquire(state.stores.projectiles);
   if (!p) return;
@@ -200,10 +246,26 @@ function fireTurretShot(state, c, target) {
   p.facing = Math.atan2(dz, dx);
   p.owner = c.ownerPlayer;
   if (w) {
+    const params = w.def.behaviorParams || {};
     p.weaponRef = w;
-    p.ptype = 'projectile';
     p.archetype = (w.def.visual && w.def.visual.projectile) || 'seed_bolt';
     p.pierce = (w.def.stats && w.def.stats.pierce) || 0;
+    if (params.lobbed) {
+      // Mortar turrets (melon_mortar_turret): arc to the target and explode.
+      p.ptype = 'lobbed';
+      p.aiX = target.x;
+      p.aiZ = target.z;
+      const stats = c.ownerPlayer.stats;
+      p.expRadius =
+        ((w.def.stats && w.def.stats.radius) || 1.8) * (1 + ((stats && stats.explosionSize) || 0) / 100);
+      p.ttl = d / p.speed + 0.05;
+    } else if (params.chainJumps) {
+      // Tesla turrets (tesla_totem_turret): bolts chain between enemies.
+      p.ptype = 'chain';
+      p.chainLeft = params.chainJumps;
+    } else {
+      p.ptype = 'projectile';
+    }
   } else {
     p.ptype = 'effect';
     p.archetype = 'seed_bolt';
@@ -211,7 +273,7 @@ function fireTurretShot(state, c, target) {
     p.damage = Math.max(1, Math.round(c.dmg * (1 + ((pl && pl.stats.damagePct) || 0) / 100)));
   }
   p.rangeLeft = w ? weaponRange(w, c.ownerPlayer.stats) + 2 : (c.def.range || 8) + 2;
-  p.ttl = 3;
+  if (p.ptype !== 'lobbed') p.ttl = 3;
   c.facing = p.facing;
 }
 
@@ -287,6 +349,8 @@ export function updateCompanions(state, dt) {
           break;
         }
       }
+      // Pets take enemy contact damage (and can die; see killCompanion).
+      tickCompanionContact(state, c, dt);
       continue;
     }
 
@@ -317,14 +381,18 @@ export function updateCompanions(state, dt) {
           break;
         }
       }
+      tickCompanionContact(state, c, dt);
     }
   }
 }
 
-/** Pet death hook (weapons.js/enemies could call this; sets respawn timer). */
+/** Pet death: sets the weapon's respawn timer, emits 'pet:death' {count}. */
 export function killCompanion(state, c) {
+  if (!c.active) return;
   if (c.weaponInst) c.weaponInst._petRespawnAt = state.timeSec + ((c.weaponInst.def.behaviorParams || {}).respawn || 5);
   release(state.stores.companions, c);
+  PET_DEATH_EV.count = liveCompanionCount(state);
+  state.bus.emit('pet:death', PET_DEATH_EV);
 }
 
 /** Release everything (wave transitions / run teardown). */

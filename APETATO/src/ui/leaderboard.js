@@ -1,9 +1,12 @@
 // APETATO ui/leaderboard — local daily-challenge results.
 // Today's runs as a ranked table plus a compact best-per-day history, all
 // from save.data.daily (local only; no network anywhere in APETATO).
+// Day keys are the UTC todayKey() from meta/daily.js (the module that writes
+// save.data.daily), NOT the local-time key in ui/dom.js.
 
-import { el, mount, btn, fmtTime, fmtInt, todayKey, contentById } from './dom.js';
+import { el, mount, btn, fmtTime, fmtInt, contentById } from './dom.js';
 import { Content } from '../content/registry.js';
+import { todayKey } from '../meta/daily.js';
 
 export function createLeaderboard(ctx) {
   const { states, save, nav } = ctx;
@@ -13,9 +16,8 @@ export function createLeaderboard(ctx) {
   function entriesOf(dayBlob) {
     if (!dayBlob) return [];
     if (Array.isArray(dayBlob)) return dayBlob;
-    if (Array.isArray(dayBlob.entries)) return dayBlob.entries;
-    if (Array.isArray(dayBlob.runs)) return dayBlob.runs;
-    if (typeof dayBlob === 'object') return [dayBlob];
+    // daily.js stores { scores: [{score, characterId, wave, timeSec, ...}] }.
+    if (Array.isArray(dayBlob.scores)) return dayBlob.scores;
     return [];
   }
 

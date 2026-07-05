@@ -193,4 +193,34 @@ export const SUPPORT_WEAPONS = deepFreeze([
     sfx: 'gong',
     unlock: { type: 'default' },
   },
+  {
+    id: 'blood_petal_censer',
+    name: 'Blood Petal Censer',
+    description: 'Swings incense that smells like victory and tastes like other people\'s HP.',
+    classes: ['support', 'lifesteal'],
+    tier: 2,
+    basePrice: 30,
+    stats: { damage: 3, cooldown: 0.9, range: 3, knockback: 0, critChance: 3, critMult: 1.5, radius: 3, duration: 1 },
+    scaling: { elementalDamage: 0.5, lifesteal: 0.4 },
+    behavior: 'aura',
+    behaviorParams: { tick: 0.9, healSelfPerTick: 0.3 },
+    onHit: [
+      { trigger: 'onHit', chance: 15, do: [{ op: 'heal', amount: 1 }] },
+    ],
+    visual: {
+      projectile: 'holy_ring',
+      muzzle: 'red_drip',
+      model: {
+        base: 'custom', scale: 0.55, primary: '#7d2c3f', secondary: '#ffcf40', accent: '#d64a5a',
+        parts: [
+          { shape: 'sphere', size: [0.12, 0.14, 0.12], pos: [0, -0.05, 0], rot: [0, 0, 0], color: 'primary' },
+          { shape: 'cylinder', size: [0.02, 0.25, 0.02], pos: [0, 0.14, 0], rot: [0, 0, 0], color: 'secondary' },
+          { shape: 'sphere', size: [0.05, 0.05, 0.05], pos: [0, -0.14, 0], rot: [0, 0, 0], color: 'accent' },
+        ],
+        animation: 'bob',
+      },
+    },
+    sfx: 'chime',
+    unlock: { type: 'default' },
+  },
 ]);

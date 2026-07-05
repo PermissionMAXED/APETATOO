@@ -28,8 +28,9 @@ export const CONFIG = deepFreeze({
     baseSpeed: 5.2,
     /** Invulnerability window after taking a hit, seconds. */
     iFrames: 0.35,
-    /** Base pickup magnet radius, world units. */
-    basePickup: 1.5,
+    /** Base pickup magnet radius, world units (keep in sync with
+     *  statmodel.pickupRadius). */
+    basePickup: 2.2,
   },
 
   /** Default arena bounds (world units, XZ plane, centered on origin). */

@@ -99,16 +99,19 @@ export function initDaily(bus, save) {
   bus.on('run:end', (p = {}) => {
     if (!lastRunStart || lastRunStart.modeId !== 'daily') return;
     if (lastRunStart.customRules && lastRunStart.customRules.practice) return;
+    if (p.abandoned) return; // abandoned runs never land on the board
 
     const runStats = p.runStats || {};
     const wave = Number(p.wave ?? runStats.wave) || 0;
+    const characterId = lastRunStart.characterId || runStats.characterId || 'unknown';
     const submitted = submitDaily(save, {
       wave,
       kills: Number(runStats.kills) || 0,
       coinsEarned: Number(runStats.coinsEarned ?? runStats.coins) || 0,
-      characterId: lastRunStart.characterId || runStats.characterId || 'unknown',
+      characterId,
       timeSec: Number(runStats.timeSec) || 0,
-      buildSummary: runStats.buildSummary || null,
+      // Game provides runStats.buildSummary; fall back to a short string.
+      buildSummary: runStats.buildSummary || `${characterId} · wave ${wave}`,
     });
     bus.emit('daily:submitted', submitted);
   });

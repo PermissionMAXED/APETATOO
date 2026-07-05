@@ -29,9 +29,11 @@ const save = initSave();
 const input = initInput(window);
 const renderApi = initRenderer(gameCanvas, fxCanvas);
 const game = createGame({ bus, states, save, input, renderApi });
-initUI({ bus, states, save, game, renderApi });
+// initMeta only needs bus+save; it must run before initUI so the UI can
+// spend golden bananas through meta.buyUnlock (character/weapon purchases).
+const meta = initMeta({ bus, save });
+initUI({ bus, states, save, game, renderApi, meta });
 initAudio({ bus, save });
-initMeta({ bus, save });
 
 // Optional mouse-aim hookup: if the renderer exposes a camera rig with
 // screenToWorld(sx, sy, out), wire it so player 0 can aim with the mouse.
@@ -47,6 +49,7 @@ window.APETATO_DEBUG = {
   save,
   input,
   game,
+  meta,
   runSelfTests() {
     const results = {
       bus: busSelfTest(),

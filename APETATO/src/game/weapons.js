@@ -2,12 +2,14 @@
 //
 // Behaviors: melee_swing (arc, default 100°), melee_thrust, melee_spin
 // (360°), projectile, burst (burstCount shots ~60ms apart), shotgun
-// (count + spread), lobbed (arc shot, explodes), beam (8 ticks/s on target),
+// (count + spread), lobbed (arc shot, explodes; stats.count = cluster),
+// beam (ticks on the weapon cooldown, pierces stats.pierce extra targets),
 // chain (hops, -20% dmg each), boomerang (out + return), orbit (persistent
 // orbiters), aura (dps around player), nova (ring pulse per cooldown),
 // homing (6 rad/s turn), turret / pet (companions), mine (proximity),
 // support_buff (periodic buff op), rail (instant pierce-all line),
-// chaos_random (random projectile/shotgun/nova/explosion at 0.8-1.5x).
+// chaos_random (random attack from behaviorParams.pool with damage jitter
+// and optional jackpot).
 //
 // extraProjectiles adds to the count of projectile-family fires.
 // Merge: same weapon id at the same tier combines to tier+1 (max 4);
@@ -28,14 +30,15 @@ import {
   spawnMine,
 } from './projectiles.js';
 import { deployTurret, ensurePet } from './companions.js';
-import { addBuff, recomputeStats } from './player.js';
+import { addBuff, recomputeStats, pushBuildLog } from './player.js';
 import { registerOwner, unregisterOwner } from './effects.js';
 import { updateSynergies } from './synergy.js';
 
 const MELEE_Q = []; // arc-hit scratch
+const BEAM_Q = []; // beam line-hit scratch (separate: beam runs inside the weapon loop)
 const FIRE_EV = { weaponId: '', x: 0, z: 0, behavior: '' };
 const MAX_TIER = 4;
-const BEAM_TICK = 1 / 8;
+const CHAOS_DEFAULT_POOL = ['projectile', 'shotgun', 'nova', 'explosion'];
 
 let instSeq = 1;
 
@@ -116,7 +119,7 @@ export function addWeapon(state, player, def) {
   if (Array.isArray(def.onHit) && def.onHit.length > 0) {
     registerOwner(player, effectSourceId(w), def.onHit, { weapon: w });
   }
-  state.runStats.buildLog.push({
+  pushBuildLog(state, {
     wave: state.wave,
     kind: merged ? 'merge' : 'weapon',
     id: def.id,
@@ -160,8 +163,18 @@ function findTarget(state, player, range) {
   return state.hash.nearest(player.x, player.z, range, null);
 }
 
+function extraProjectiles(player) {
+  return Math.max(0, Math.round(player.stats.extraProjectiles || 0));
+}
+
 function projectileCount(w, player) {
-  return 1 + Math.max(0, Math.round(player.stats.extraProjectiles || 0));
+  return 1 + extraProjectiles(player);
+}
+
+/** Authored multi-shot: stats.count (default 1) + extraProjectiles. */
+function countedProjectiles(w, player) {
+  const stats = w.def.stats || {};
+  return Math.max(1, Math.round(stats.count || 1)) + extraProjectiles(player);
 }
 
 /** Fire `count` projectiles fanned around (dirX, dirZ). */
@@ -314,19 +327,21 @@ function fireWeapon(state, player, w, target, dirX, dirZ, range) {
     }
 
     case 'lobbed': {
-      const count = projectileCount(w, player);
+      const count = countedProjectiles(w, player);
+      // Cluster-authored mortars fire secondary bombs at reduced damage.
+      const clusterMult = (params.cluster && params.cluster.damageMult) || 1;
       for (let i = 0; i < count; i++) {
         const jx = i === 0 ? 0 : (state.rng.next() - 0.5) * 2.4;
         const jz = i === 0 ? 0 : (state.rng.next() - 0.5) * 2.4;
         const tx = target ? target.x + jx : player.x + dirX * range + jx;
         const tz = target ? target.z + jz : player.z + dirZ * range + jz;
-        spawnLobbed(state, player, w, tx, tz, 1);
+        spawnLobbed(state, player, w, tx, tz, i === 0 ? 1 : clusterMult);
       }
       break;
     }
 
     case 'chain':
-      fanProjectiles(state, player, w, dirX, dirZ, projectileCount(w, player), 0.35, 'chain', 1);
+      fanProjectiles(state, player, w, dirX, dirZ, countedProjectiles(w, player), 0.35, 'chain', 1);
       break;
 
     case 'homing':
@@ -348,6 +363,8 @@ function fireWeapon(state, player, w, target, dirX, dirZ, range) {
 
     case 'turret':
       deployTurret(state, player, w);
+      // Turrets redeploy on their authored deployCooldown, not the fire rate.
+      w.cooldownLeft = Math.max(w.cooldownLeft, params.deployCooldown || 6);
       break;
 
     case 'support_buff':
@@ -359,21 +376,56 @@ function fireWeapon(state, player, w, target, dirX, dirZ, range) {
       break;
 
     case 'chaos_random': {
-      const mult = 0.8 + state.rng.next() * 0.7; // 0.8 - 1.5x
-      const pick = state.rng.int(0, 3);
-      if (pick === 0) {
-        fanProjectiles(state, player, w, dirX, dirZ, projectileCount(w, player), 0.25, 'projectile', mult);
-      } else if (pick === 1) {
-        const count = 4 + Math.max(0, Math.round(player.stats.extraProjectiles || 0));
-        fanProjectiles(state, player, w, dirX, dirZ, count, 0.6, 'projectile', mult);
-      } else if (pick === 2) {
-        novaPulse(state, player, w, (stats.radius || 3) * (1 + (player.stats.explosionSize || 0) / 100), mult);
-      } else {
-        const x = target ? target.x : player.x + dirX * 3;
-        const z = target ? target.z : player.z + dirZ * 3;
-        const roll = rollWeaponDamage(state, player, w, mult);
-        const radius = (stats.radius || 2.2) * (1 + (player.stats.explosionSize || 0) / 100);
-        explodeFromPlayer(state, player, x, z, radius, roll.damage, w);
+      // Authored pool / jitter / jackpot (schrodingers_crate, chaos_barrel_organ).
+      const jitter = params.damageJitter !== undefined ? Number(params.damageJitter) : 0.7;
+      let mult = 1 + (state.rng.next() * 2 - 1) * jitter * 0.5;
+      if (params.jackpotChance && state.rng.next() * 100 < params.jackpotChance) {
+        mult *= params.jackpotMult || 2;
+      }
+      const pool =
+        Array.isArray(params.pool) && params.pool.length > 0
+          ? params.pool
+          : CHAOS_DEFAULT_POOL;
+      const pick = state.rng.pick(pool);
+      switch (pick) {
+        case 'shotgun': {
+          const count = Math.max(4, stats.count || 0) + extraProjectiles(player);
+          fanProjectiles(state, player, w, dirX, dirZ, count, 0.6, 'projectile', mult);
+          break;
+        }
+        case 'burst':
+          fanProjectiles(state, player, w, dirX, dirZ, 3 + extraProjectiles(player), 0.15, 'projectile', mult);
+          break;
+        case 'nova':
+          novaPulse(state, player, w, (stats.radius || 3) * (1 + (player.stats.explosionSize || 0) / 100), mult);
+          break;
+        case 'chain':
+          fanProjectiles(state, player, w, dirX, dirZ, countedProjectiles(w, player), 0.35, 'chain', mult);
+          break;
+        case 'homing':
+          fanProjectiles(state, player, w, dirX, dirZ, projectileCount(w, player), 0.5, 'homing', mult);
+          break;
+        case 'boomerang':
+          fanProjectiles(state, player, w, dirX, dirZ, projectileCount(w, player), 0.4, 'boomerang', mult);
+          break;
+        case 'lobbed': {
+          const tx = target ? target.x : player.x + dirX * range;
+          const tz = target ? target.z : player.z + dirZ * range;
+          spawnLobbed(state, player, w, tx, tz, mult);
+          break;
+        }
+        case 'explosion': {
+          const x = target ? target.x : player.x + dirX * 3;
+          const z = target ? target.z : player.z + dirZ * 3;
+          const roll = rollWeaponDamage(state, player, w, mult);
+          const radius = (stats.radius || 2.2) * (1 + (player.stats.explosionSize || 0) / 100);
+          explodeFromPlayer(state, player, x, z, radius, roll.damage, w);
+          break;
+        }
+        case 'projectile':
+        default:
+          fanProjectiles(state, player, w, dirX, dirZ, projectileCount(w, player), 0.25, 'projectile', mult);
+          break;
       }
       break;
     }
@@ -435,15 +487,43 @@ function tickBeam(state, player, w, dt) {
   }
   const dx = target.x - player.x;
   const dz = target.z - player.z;
-  if (dx * dx + dz * dz > range * range) {
+  const d2 = dx * dx + dz * dz;
+  if (d2 > range * range) {
     w._beamTarget = null;
     return;
   }
-  const tick = BEAM_TICK / (1 + (player.stats.attackSpeed || 0) / 100);
+  // Tick cadence honors the weapon's effective cooldown (merge tier +
+  // attackSpeed), so beam DPS matches the authored damage/cooldown budget.
+  const tick = weaponCooldown(w, player.stats);
+  const stats = w.def.stats || {};
+  const params = w.def.behaviorParams || {};
+  const maxTargets = 1 + Math.max(0, stats.pierce || 0);
+  const width = (params.width || 0.35) + 0.15;
   w._beamAcc += dt;
   while (w._beamAcc >= tick) {
     w._beamAcc -= tick;
+    const d = Math.sqrt(d2) || 1;
+    const bx = dx / d;
+    const bz = dz / d;
     applyWeaponHit(state, player, w, target, 1);
+    // Pierce: damage additional enemies along the beam line.
+    if (maxTargets > 1) {
+      let hits = 1;
+      const n = state.hash.query(player.x + bx * range * 0.5, player.z + bz * range * 0.5, range * 0.5 + 2, BEAM_Q);
+      for (let i = 0; i < n && hits < maxTargets; i++) {
+        const ent = BEAM_Q[i];
+        if (!ent || ent === target || ent.kind !== 'enemy' || !ent.active || ent.dead) continue;
+        const px = ent.x - player.x;
+        const pz = ent.z - player.z;
+        const along = px * bx + pz * bz;
+        if (along < 0 || along > range) continue;
+        const perp = Math.abs(-px * bz + pz * bx);
+        if (perp <= ent.radius + width) {
+          applyWeaponHit(state, player, w, ent, 1);
+          hits++;
+        }
+      }
+    }
     if (!target.active || target.dead) {
       w._beamTarget = null;
       break;
@@ -456,7 +536,7 @@ function tickOrbit(state, player, w, dt) {
   const params = w.def.behaviorParams || {};
   w.orbitAngle += (params.orbitSpeed || 3.5) * dt;
   if (w.orbitAngle > TAU) w.orbitAngle -= TAU;
-  const want = projectileCount(w, player);
+  const want = countedProjectiles(w, player);
   if (w._orbitCount !== want) {
     w._orbitGen++; // old orbiters self-release next update
     w._orbitCount = want;

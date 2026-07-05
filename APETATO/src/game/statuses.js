@@ -25,6 +25,8 @@ const DPS_TYPES = { burn: 1, poison: 1, shock: 1, bleed: 1 };
 // Scratch for shock arcs (module-private; statuses never nest queries).
 const ARC_Q = [];
 
+const APPLY_EV = { type: '', ent: null }; // 'status:apply' (audio hooks)
+
 /**
  * Apply (or refresh) a status on a target that owns `.statuses` slots.
  * `srcStats` are the applier's stats (may be null for hazards/enemies).
@@ -61,6 +63,10 @@ export function applyStatus(state, target, type, dps, duration, srcStats) {
   free.stacks = 1;
   free.tickAcc = 0;
   free.slowPct = type === 'slow' ? 40 : 0;
+  APPLY_EV.type = type;
+  APPLY_EV.ent = target;
+  state.bus.emit('status:apply', APPLY_EV);
+  APPLY_EV.ent = null;
 }
 
 /** Cached movement multiplier from active statuses (0 for freeze/stun). */

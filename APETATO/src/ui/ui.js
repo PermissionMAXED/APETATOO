@@ -22,6 +22,7 @@ import { createGameover } from './gameover.js';
 import { createLeaderboard } from './leaderboard.js';
 import { createStatsScreen } from './statsScreen.js';
 import { createAchievementsScreen } from './achievementsScreen.js';
+import { createChallengesScreen } from './challengesScreen.js';
 import { initToasts } from './toasts.js';
 
 /** States in which the UI nav manager owns keyboard/gamepad input. */
@@ -55,9 +56,12 @@ const PAD_AXIS_THRESHOLD = 0.55;
 
 /**
  * Initialize the whole UI package. Called once from main.js.
- * @param {{bus:object, states:object, save:object, game:object, renderApi:object}} deps
+ * @param {{bus:object, states:object, save:object, game:object,
+ *          renderApi:object, meta:object}} deps
+ *   meta comes from initMeta() and exposes buyUnlock/isUnlocked for
+ *   golden-banana spending screens.
  */
-export function initUI({ bus, states, save, game, renderApi }) {
+export function initUI({ bus, states, save, game, renderApi, meta }) {
   const uiRoot = document.getElementById('ui-root');
   if (!uiRoot) {
     console.error('[ui] #ui-root not found — UI disabled');
@@ -329,7 +333,7 @@ export function initUI({ bus, states, save, game, renderApi }) {
     session.lastRunEnd = payload || null;
   });
 
-  const ctx = { bus, states, save, game, renderApi, nav, session };
+  const ctx = { bus, states, save, game, renderApi, meta, nav, session };
 
   const hud = createHud(ctx, hudLayer);
   initToasts(ctx, toastLayer);
@@ -346,6 +350,7 @@ export function initUI({ bus, states, save, game, renderApi }) {
     leaderboard: createLeaderboard(ctx),
     statsScreen: createStatsScreen(ctx),
     achievementsScreen: createAchievementsScreen(ctx),
+    challenges: createChallengesScreen(ctx),
   };
 
   let activeScreen = null;
@@ -363,7 +368,11 @@ export function initUI({ bus, states, save, game, renderApi }) {
     nav.setKeyHandler(null);
     clear(screenLayer);
 
-    const key = STATE_SCREEN[stateName];
+    // A payload can override the default screen for a state (the core state
+    // machine has a fixed state list, so e.g. the Challenges screen rides on
+    // MODE_SELECT via { uiScreen: 'challenges' }).
+    const override = payload && payload.uiScreen;
+    const key = override && screens[override] ? override : STATE_SCREEN[stateName];
     if (key && screens[key]) {
       activeScreen = screens[key];
       try {

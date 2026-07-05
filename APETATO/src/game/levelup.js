@@ -1,6 +1,6 @@
 // APETATO game/levelup — XP curve + level-up choice flow.
 //
-// xpNeeded(l) = floor((l+3)^2 * 0.75). Each level: +1 maxHp,
+// xpNeeded(l) = floor((l+3)^2 * 0.62). Each level: +1 maxHp,
 // pendingLevelups++, 'player:levelup' { level, player }.
 //
 // getChoices(): 4 distinct UpgradeDefs rolled by weight; when
@@ -10,7 +10,7 @@
 // interrupted (PLAYING or SHOP) via state.resumeAfterLevelups.
 
 import { Content } from '../content/registry.js';
-import { recomputeStats } from './player.js';
+import { recomputeStats, pushBuildLog } from './player.js';
 import { fireTriggerFast } from './effects.js';
 
 const LEVEL_EV = { level: 0, player: null };
@@ -18,7 +18,7 @@ const XP_EV = { amount: 0 };
 
 /** XP required to go from level l to l+1. */
 export function xpNeeded(l) {
-  return Math.floor((l + 3) * (l + 3) * 0.75);
+  return Math.floor((l + 3) * (l + 3) * 0.62);
 }
 
 /**
@@ -117,9 +117,11 @@ export function createLevelupApi(getState, states) {
       if (!player || player.pendingLevelups <= 0) return;
       const pick = choices[idx] || choices[0];
       if (pick && pick.statMods) {
-        player._upgradeSources.push({ mods: pick.statMods });
+        // Fold into the single accumulated upgrade source (endless-safe).
+        const acc = player._upgradeSources.mods;
+        for (const k in pick.statMods) acc[k] = (acc[k] || 0) + pick.statMods[k];
         player._sourcesDirty = true;
-        state.runStats.buildLog.push({ wave: state.wave, kind: 'upgrade', id: pick.id });
+        pushBuildLog(state, { wave: state.wave, kind: 'upgrade', id: pick.id });
         recomputeStats(state, player);
       }
       player.pendingLevelups--;

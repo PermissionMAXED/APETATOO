@@ -19,7 +19,7 @@ import { applyStatus } from './statuses.js';
 import { applyDirectDamage, explodeFromPlayer, damagePlayer } from './combat.js';
 import { healPlayer, addShield, addBuff, addEarnedStat } from './player.js';
 import { spawnSimpleProjectile } from './projectiles.js';
-import { summonCompanion } from './companions.js';
+import { summonCompanion, damageCompanionsInRadius } from './companions.js';
 import { grantXp } from './levelup.js';
 import { gainCoins } from './pickups.js';
 
@@ -340,9 +340,20 @@ function runOp(op, rec, ctx) {
       break;
     }
     case 'explode': {
-      const atTarget = op.at === 'target' && ctx.target;
-      const x = atTarget ? ctx.target.x : player.x;
-      const z = atTarget ? ctx.target.z : player.z;
+      let x = player.x;
+      let z = player.z;
+      if (op.at === 'target' && ctx.target) {
+        x = ctx.target.x;
+        z = ctx.target.z;
+      } else if (op.at === 'nearest') {
+        // Interval-triggered explosions (e.g. pocket_volcano) have no ctx
+        // target — aim at the nearest enemy instead of the player's feet.
+        const near = state.hash.nearest(player.x, player.z, 12, null);
+        if (near) {
+          x = near.x;
+          z = near.z;
+        }
+      }
       const dmg = op.scaled ? scaledDamage(op.damage || 1, player) : Math.max(1, Math.round(op.damage || 1));
       const radius = (Number(op.radius) || 2) * (1 + (player.stats.explosionSize || 0) / 100);
       explodeFromPlayer(state, player, x, z, radius, dmg, null);
@@ -443,6 +454,7 @@ function runEnemyOps(state, ent, ops, hitPlayer) {
             damagePlayer(state, pl, Number(op.damage) || 5, ent);
           }
         }
+        damageCompanionsInRadius(state, ent.x, ent.z, radius, Number(op.damage) || 5);
         break;
       }
       case 'status': {

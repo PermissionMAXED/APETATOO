@@ -16,8 +16,9 @@
 //   }
 //
 // Bus subscriptions (auto feedback): enemy:hit, enemy:death, explosion, crit,
-// player:hit, player:levelup, boss:spawn, settings:changed. The bus import is
-// dynamic + guarded so this module still loads standalone.
+// player:hit, player:levelup, pickup:collect, weapon:fire, boss:spawn,
+// boss:death, boss:phase, settings:changed. The bus import is dynamic +
+// guarded so this module still loads standalone.
 
 import * as THREE from 'three';
 import { createCameraRig } from './cameraRig.js';
@@ -73,6 +74,11 @@ export function initRenderer(gameCanvas, fxCanvas) {
   // Last known player position — fallback anchor for bus-driven vfx.
   let lastPX = 0;
   let lastPZ = 0;
+
+  // Last known boss position — anchor for boss:phase feedback (the phase
+  // payload carries no coordinates).
+  let lastBossX = 0;
+  let lastBossZ = 0;
 
   // ---------------------------------------------------------------------------
   // Internal helpers
@@ -199,6 +205,8 @@ export function initRenderer(gameCanvas, fxCanvas) {
       // Boss + companions as animated groups.
       if (state.boss && state.boss.ent && state.boss.ent.active !== false) {
         syncGroupEntity(state.boss.ent, state.boss.def && state.boss.def.model, t);
+        lastBossX = state.boss.ent.x || 0;
+        lastBossZ = state.boss.ent.z || 0;
       }
       const comps = state.companions;
       if (comps) {
@@ -218,8 +226,8 @@ export function initRenderer(gameCanvas, fxCanvas) {
     renderer.render(scene, cameraRig.camera);
   }
 
-  /** One-shot effect. Types: hit, explosion, muzzle, telegraph, levelup,
-   *  pickup, nova, beam (opts:{x2,z2}), aura. */
+  /** One-shot effect. Types: hit, explosion, muzzle, flash, telegraph,
+   *  levelup, pickup, nova, beam (opts:{x2,z2}), aura. */
   function vfx(type, x, z, opts) {
     vfxSys.spawn(type, x, z, opts);
   }
@@ -322,6 +330,28 @@ export function initRenderer(gameCanvas, fxCanvas) {
 
   // --- bus wiring (guarded: renderer must load standalone) ---------------------
 
+  // Reused opts objects — bus handlers fire in hot paths; never allocate.
+  const PICKUP_COLORS = {
+    xp: '#4da6ff', // blue
+    coin: '#ffe14d', // yellow
+    heal: '#66ff88', // green
+    crate: '#ffb830', // gold
+  };
+  const PICKUP_OPTS = { color: '#4da6ff' };
+  const MUZZLE_OPTS = { color: '#fff2b0', radius: 0.24 };
+  const DEATH_FLASH_OPTS = { color: '#ffffff', radius: 0.45, duration: 0.08 };
+  const PHASE_FLASH_OPTS = { color: '#ff8a5a', radius: 1.4, duration: 0.18 };
+  // Weapon behaviors that read as a "shot" from the player — these get a
+  // muzzle flash. Melee/orbit/aura/pet families do not.
+  const MUZZLE_BEHAVIORS = {
+    projectile: true,
+    burst: true,
+    shotgun: true,
+    lobbed: true,
+    rail: true,
+    beam: true,
+  };
+
   import('../core/bus.js')
     .then(({ bus }) => {
       if (!bus) return;
@@ -340,7 +370,15 @@ export function initRenderer(gameCanvas, fxCanvas) {
       });
       const onDeath = (e) => {
         const c = (e && (e.color || (e.def && e.def.model && e.def.model.primary))) || '#c9c2b8';
-        particles.burst(evX(e), evZ(e), c, 14, 6);
+        const x = evX(e);
+        const z = evZ(e);
+        const elite = !!(e && e.elite);
+        particles.burst(x, z, c, elite ? 30 : 18, elite ? 7.5 : 6);
+        DEATH_FLASH_OPTS.color = c;
+        DEATH_FLASH_OPTS.radius = elite ? 0.85 : 0.45;
+        DEATH_FLASH_OPTS.duration = elite ? 0.12 : 0.08;
+        vfx('flash', x, z, DEATH_FLASH_OPTS);
+        if (elite) shake(0.08);
       };
       bus.on('enemy:death', onDeath);
       bus.on('enemy:died', onDeath); // alias used by some kernel docs
@@ -348,7 +386,7 @@ export function initRenderer(gameCanvas, fxCanvas) {
         vfx('explosion', evX(e), evZ(e), e);
         shake(0.25);
       });
-      bus.on('crit', () => shake(0.12));
+      bus.on('crit', () => shake(0.18));
       bus.on('player:hit', () => {
         dmg.vignette(0.85);
         shake(0.35);
@@ -356,7 +394,24 @@ export function initRenderer(gameCanvas, fxCanvas) {
       bus.on('player:levelup', (e) => {
         vfx('levelup', evX(e), evZ(e));
       });
+      bus.on('pickup:collect', (e) => {
+        PICKUP_OPTS.color = PICKUP_COLORS[e && e.ptype] || '#9fffb0';
+        vfx('pickup', evX(e), evZ(e), PICKUP_OPTS);
+      });
+      bus.on('weapon:fire', (e) => {
+        if (e && MUZZLE_BEHAVIORS[e.behavior] === true) {
+          vfx('muzzle', evX(e), evZ(e), MUZZLE_OPTS);
+        }
+      });
       bus.on('boss:spawn', () => shake(0.5));
+      bus.on('boss:death', (e) => {
+        shake(0.35);
+        vfx('explosion', evX(e), evZ(e));
+      });
+      bus.on('boss:phase', () => {
+        shake(0.25);
+        vfx('flash', lastBossX, lastBossZ, PHASE_FLASH_OPTS);
+      });
       bus.on('settings:changed', (s) => {
         if (!s) return;
         if (typeof s.screenShake === 'number') shakeMult = s.screenShake;

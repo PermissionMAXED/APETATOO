@@ -232,14 +232,29 @@ export function createShop(ctx) {
 
     const items = ownedItems(p);
     mount(ownedPanel, el('div', 'detail-section-title', `Items (${items.length})`));
-    for (const it of items) {
+    items.forEach((it, enumIdx) => {
       const row = mount(ownedPanel, el('div', 'owned-item-line'));
       const name = (it.def && it.def.name) || it.id;
       const rar = it.def && typeof it.def.rarity === 'number' ? it.def.rarity : 0;
       const nameEl = mount(row, el('span', '', name));
       nameEl.style.color = rarityColor(rar);
       mount(row, el('span', 'stacks', it.stacks > 1 ? `×${it.stacks}` : ''));
-    }
+
+      // game.shop.sell('item', idx) indexes into player.itemsOrder; prefer
+      // resolving by id in case enumeration order ever diverges.
+      const orderIdx = Array.isArray(p && p.itemsOrder) ? p.itemsOrder.indexOf(it.id) : enumIdx;
+      const sell = btn('Sell', 'sell-btn danger', () => {
+        try {
+          game.shop.sell('item', orderIdx >= 0 ? orderIdx : enumIdx);
+        } catch (err) {
+          console.error('[ui] shop.sell item failed:', err);
+        }
+        refreshAll();
+      });
+      sell.dataset.uiId = 'sell_i_' + (it.id || enumIdx);
+      sell.title = it.stacks > 1 ? 'Sell one stack' : 'Sell';
+      mount(row, sell);
+    });
     if (items.length === 0) mount(ownedPanel, el('div', 'empty-note', 'No trinkets yet.'));
   }
 

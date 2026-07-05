@@ -36,6 +36,10 @@ export function createHud(ctx, layer) {
   const waveTimer = mount(topCenter, el('div', 'wave-timer', '0'));
   const speedrun = mount(topCenter, el('div', 'speedrun-timer', ''));
 
+  // Active Chaos Run modifier badge (bus 'chaos:modifier', per wave).
+  const chaosBadge = mount(topCenter, el('div', 'chaos-badge', ''));
+  chaosBadge.style.display = 'none';
+
   const bossWrap = mount(topCenter, el('div', 'boss-bar-wrap'));
   const bossName = mount(bossWrap, el('div', 'boss-name', 'BOSS'));
   const bossBar = mount(bossWrap, el('div', 'bar boss'));
@@ -164,7 +168,10 @@ export function createHud(ctx, layer) {
     waveTimer.classList.toggle('low', dur > 0 && remain <= 5);
 
     const settings = (save && save.data && save.data.settings) || {};
-    if (settings.showTimer && typeof state.speedrunSec === 'number') {
+    // Competitive modes (daily / endless) always show the speedrun timer;
+    // elsewhere the settings toggle decides.
+    const competitive = state.modeId === 'daily' || state.modeId === 'endless';
+    if ((settings.showTimer || competitive) && typeof state.speedrunSec === 'number') {
       speedrun.textContent = fmtTime(state.speedrunSec);
       speedrun.style.display = '';
     } else {
@@ -207,6 +214,16 @@ export function createHud(ctx, layer) {
     renderSynergies();
   });
 
+  bus.on('chaos:modifier', (payload) => {
+    if (payload && payload.name) {
+      chaosBadge.textContent = `🌀 ${payload.name}`;
+      chaosBadge.title = payload.description || '';
+      chaosBadge.style.display = '';
+    } else {
+      chaosBadge.style.display = 'none';
+    }
+  });
+
   bus.on('run:start', () => {
     synergyTiers.clear();
     renderSynergies();
@@ -214,6 +231,7 @@ export function createHud(ctx, layer) {
     bossWrap.style.display = 'none';
     weaponsSig = '';
     clear(weaponsWrap);
+    chaosBadge.style.display = 'none';
   });
 
   // ---------------------------------------------------------- control -----

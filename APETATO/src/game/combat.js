@@ -22,7 +22,8 @@ import { spawnEnemyById } from './spawner.js';
 // --- reused event payloads (bus listeners must not retain these) -----------
 const HIT_EV = { ent: null, damage: 0, crit: false, weaponId: '', x: 0, z: 0, kind: 'normal' };
 const CRIT_EV = { damage: 0, x: 0, z: 0 };
-const PHIT_EV = { damage: 0, source: null };
+const PHIT_EV = { damage: 0, source: null, hp: 0, maxHp: 0 };
+const SHIELD_BREAK_EV = {};
 const DODGE_EV = { player: null, x: 0, z: 0 };
 const DEATH_EV = { ent: null, def: null, x: 0, z: 0, elite: false, cause: '', damage: 0, maxHp: 0 };
 const EXPL_EV = { x: 0, z: 0, radius: 0 };
@@ -71,7 +72,12 @@ export function rollWeaponDamage(state, player, w, mult) {
   let raw = weaponBaseDamage(w);
   const scaling = w.def.scaling;
   if (scaling) {
-    for (const k in scaling) raw += scaling[k] * (stats[k] || 0);
+    // damagePct is excluded here: it is already the global multiplier below
+    // (adding it as flat damage too would double-dip).
+    for (const k in scaling) {
+      if (k === 'damagePct') continue;
+      raw += scaling[k] * (stats[k] || 0);
+    }
   }
   raw *= 1 + (stats.damagePct || 0) / 100;
   raw *= mult || 1;
@@ -114,10 +120,11 @@ export function applyWeaponHit(state, player, w, ent, mult) {
   ent.hp -= dmg;
   ent.hitFlash = 0.15;
 
-  // Knockback impulse away from the player.
+  // Knockback impulse away from the player. Negative knockback (e.g.
+  // singularity_peel) PULLS enemies toward the player instead.
   const stats = player.stats;
   const kb = (((w.def.stats && w.def.stats.knockback) || 0) + (stats.knockback || 0)) * 0.4;
-  if (kb > 0 && !ent.isBoss) {
+  if (kb !== 0 && !ent.isBoss) {
     const dx = ent.x - player.x;
     const dz = ent.z - player.z;
     const d = Math.sqrt(dx * dx + dz * dz) || 1;
@@ -236,7 +243,10 @@ export function killEnemy(state, ent, killer, cause, dmg) {
   ent.dead = true;
   ent.hp = 0;
   const def = ent.def || {};
-  const player = killer || state.players[0];
+  // Enemy self-destructs (cause 'selfdestruct') credit nobody: no player
+  // kill count, no onKill triggers.
+  const selfInflicted = cause === 'selfdestruct';
+  const player = killer || (selfInflicted ? null : state.players[0]);
 
   if (ent.bossTotem && state.boss) {
     state.boss.totemsAlive = Math.max(0, state.boss.totemsAlive - 1);
@@ -259,7 +269,7 @@ export function killEnemy(state, ent, killer, cause, dmg) {
 
   dropsForEnemy(state, ent);
 
-  state.runStats.kills++;
+  if (!selfInflicted) state.runStats.kills++;
   DEATH_EV.ent = ent;
   DEATH_EV.def = def;
   DEATH_EV.x = ent.x;
@@ -323,6 +333,7 @@ export function damagePlayer(state, player, amount, source, opts) {
     const absorbed = Math.min(player.shield, dmg);
     player.shield -= absorbed;
     dmg -= absorbed;
+    if (player.shield <= 0) state.bus.emit('shield:break', SHIELD_BREAK_EV);
   }
 
   player.iFrames = CONFIG.PLAYER.iFrames || 0.35;
@@ -331,6 +342,8 @@ export function damagePlayer(state, player, amount, source, opts) {
 
   PHIT_EV.damage = dmg;
   PHIT_EV.source = source || null;
+  PHIT_EV.hp = Math.max(0, player.hp);
+  PHIT_EV.maxHp = Math.max(1, player.stats.maxHp || 1);
   state.bus.emit('player:hit', PHIT_EV);
   PHIT_EV.source = null;
 
@@ -356,11 +369,14 @@ export function hazardDamagePlayer(state, player, amount) {
     const absorbed = Math.min(player.shield, dmg);
     player.shield -= absorbed;
     dmg -= absorbed;
+    if (player.shield <= 0) state.bus.emit('shield:break', SHIELD_BREAK_EV);
   }
   if (dmg > 0) player.hp -= dmg;
   state.runStats.damageTaken += dmg;
   PHIT_EV.damage = dmg;
   PHIT_EV.source = null;
+  PHIT_EV.hp = Math.max(0, player.hp);
+  PHIT_EV.maxHp = Math.max(1, player.stats.maxHp || 1);
   state.bus.emit('player:hit', PHIT_EV);
   fireTriggerFast('onTakeDamage', player, state, null, dmg, null);
   checkLowHp(state, player);
@@ -379,6 +395,9 @@ export function damagePlayerDot(state, player, amount, kind) {
 /** onLowHp fires once when dropping below 30%; re-arms above 60% (player.js). */
 function checkLowHp(state, player) {
   const maxHp = Math.max(1, player.stats.maxHp || 1);
+  // Track the lowest hp fraction seen this run (achievements: glass_win).
+  const frac = Math.max(0, player.hp) / maxHp;
+  if (frac < state.runStats.lowestHpFrac) state.runStats.lowestHpFrac = frac;
   if (player._lowHpArmed && player.hp > 0 && player.hp / maxHp <= 0.3) {
     player._lowHpArmed = false;
     fireTriggerFast('onLowHp', player, state, null, 0, null);

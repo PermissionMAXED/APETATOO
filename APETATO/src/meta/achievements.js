@@ -188,8 +188,12 @@ export function initAchievements(bus, save, opts = {}) {
       }
     }
     if (modeId === 'endless' && wave >= T.endlessWave) grant('endless_25');
-    if (modeId === 'daily') grant('daily_played');
+    // Abandoned dailies never submit a score (see daily.js) — don't count
+    // them as "completed" either. 'daily:submitted' below also grants this.
+    if (modeId === 'daily' && !p.abandoned) grant('daily_played');
 
+    // luck/curse arrive nested as runStats.stats.{luck,curse} (statOf checks
+    // both flat and nested shapes).
     if (statOf(runStats, 'luck') >= T.luckAtEnd) grant('lucky_devil');
     if (statOf(runStats, 'curse') >= T.curseAtEnd) grant('curse_flirt');
 

@@ -14,6 +14,7 @@
 import { TAU } from '../core/mathx.js';
 import { statusSpeedMult, isDisabled } from './statuses.js';
 import { damagePlayer, killEnemy } from './combat.js';
+import { damageCompanionsInRadius } from './companions.js';
 import { spawnEnemyProjectile } from './projectiles.js';
 import { resolveArenaCollision } from './collision.js';
 import { tickEnemyEffects } from './effects.js';
@@ -147,7 +148,8 @@ function updateExploder(state, ent, player, spd, dt) {
         const rr = radius + pl.radius;
         if (dx * dx + dz * dz <= rr * rr) damagePlayer(state, pl, dmg, ent);
       }
-      killEnemy(state, ent, null);
+      damageCompanionsInRadius(state, ent.x, ent.z, radius, dmg);
+      killEnemy(state, ent, null, 'selfdestruct'); // credit nobody
     }
   }
 }

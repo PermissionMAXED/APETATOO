@@ -460,4 +460,34 @@ export const MELEE_WEAPONS = deepFreeze([
     sfx: 'crunch',
     unlock: { type: 'wins', count: 3 },
   },
+  {
+    id: 'mosquito_lance',
+    name: 'Mosquito Lance',
+    description: 'A proboscis on a stick. Every poke is a tiny blood donation. Yours to keep.',
+    classes: ['melee', 'lifesteal'],
+    tier: 1,
+    basePrice: 14,
+    stats: { damage: 5, cooldown: 0.8, range: 2.2, knockback: 2, critChance: 4, critMult: 1.5 },
+    scaling: { meleeDamage: 0.9, lifesteal: 0.3 },
+    behavior: 'melee_thrust',
+    behaviorParams: { lunge: 0.4 },
+    onHit: [
+      { trigger: 'onHit', chance: 20, do: [{ op: 'heal', amount: 1 }] },
+    ],
+    visual: {
+      projectile: 'none',
+      muzzle: 'red_drip',
+      model: {
+        base: 'custom', scale: 0.55, primary: '#5d666e', secondary: '#7d2c3f', accent: '#d64a5a',
+        parts: [
+          { shape: 'cylinder', size: [0.03, 0.5, 0.03], pos: [0, 0, 0.1], rot: [1.57, 0, 0], color: 'primary' },
+          { shape: 'cone', size: [0.04, 0.16, 0.04], pos: [0, 0, 0.4], rot: [1.57, 0, 0], color: 'accent' },
+          { shape: 'sphere', size: [0.07, 0.07, 0.07], pos: [0, 0, -0.16], rot: [0, 0, 0], color: 'secondary' },
+        ],
+        animation: 'none',
+      },
+    },
+    sfx: 'shink',
+    unlock: { type: 'default' },
+  },
 ]);

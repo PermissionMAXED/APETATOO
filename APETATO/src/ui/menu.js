@@ -27,6 +27,9 @@ export function createMenu(ctx) {
     // Buttons.
     const buttons = mount(screen, el('div', 'menu-buttons'));
     mount(buttons, btn('Play', 'primary big autofocus', () => states.set('CHAR_SELECT')));
+    // Challenges rides on the MODE_SELECT state with a screen override
+    // (the core state list is fixed; see ui.js swapScreen).
+    mount(buttons, btn('Challenges', '', () => states.set('MODE_SELECT', { uiScreen: 'challenges' })));
     mount(buttons, btn('Stats', '', () => states.set('STATS', { from: 'MENU' })));
     mount(buttons, btn('Achievements', '', () => states.set('ACHIEVEMENTS', { from: 'MENU' })));
     mount(buttons, btn('Leaderboard', '', () => states.set('LEADERBOARD', { from: 'MENU' })));

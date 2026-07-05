@@ -113,6 +113,7 @@ export function createGame({ bus, states, save, input, renderApi }) {
         elitesKilled: 0,
         bossesKilled: 0,
         timeSec: 0,
+        lowestHpFrac: 1,
         dpsLog: new Map(),
         buildLog: [],
       },
@@ -124,6 +125,7 @@ export function createGame({ bus, states, save, input, renderApi }) {
       bus,
       renderApi,
       input,
+      save, // meta save handle (shoplogic consults unlocked.weapons)
       stores,
       hash: createSpatialHash(2.0),
       arenaW: (arena.size && arena.size.w) || 44,
@@ -367,11 +369,38 @@ export function createGame({ bus, states, save, input, renderApi }) {
     states.set('PLAYING');
   }
 
+  /** Fill the meta-facing runStats fields the achievement layer consumes. */
+  function finalizeRunStats() {
+    const rs = state.runStats;
+    const player = state.players[0];
+    if (!player) return;
+    rs.stats = { luck: player.stats.luck || 0, curse: player.stats.curse || 0 };
+    // Short human build summary: character + weapons(+tiers) + notable items.
+    const weapons = [];
+    for (let i = 0; i < player.weapons.length; i++) {
+      const w = player.weapons[i];
+      weapons.push((w.def.name || w.def.id) + (w.tier > 1 ? ' T' + w.tier : ''));
+    }
+    const notable = [];
+    for (const [id, stacks] of player.items) {
+      const def = Content.byId.items.get(id);
+      if (def && (def.rarity | 0) >= 3) {
+        notable.push((def.name || id) + (stacks > 1 ? ' x' + stacks : ''));
+      }
+    }
+    const charName = (player.character && (player.character.name || player.character.id)) || 'ape';
+    rs.buildSummary =
+      charName +
+      (weapons.length > 0 ? ' | ' + weapons.join(', ') : '') +
+      (notable.length > 0 ? ' | ' + notable.join(', ') : '');
+  }
+
   function endRun(victory) {
     if (!state || state.over) return;
     state.over = true;
     state.victory = !!victory;
     stopWaveSpawning(state);
+    finalizeRunStats();
     bus.emit('run:end', {
       victory: state.victory,
       runStats: state.runStats,
@@ -381,6 +410,7 @@ export function createGame({ bus, states, save, input, renderApi }) {
       arenaId: state.arena.id,
       timeSec: state.timeSec,
     });
+    renderApi.endRun(); // clear the dead run's meshes (consistent with abandonRun)
     states.set(victory ? 'VICTORY' : 'GAME_OVER');
   }
 
@@ -506,7 +536,9 @@ export function createGame({ bus, states, save, input, renderApi }) {
     if (it && it.pause) {
       if (states.is('PLAYING') || states.is('PAUSED')) togglePause();
     }
-    if (state) renderApi.syncState(state);
+    // Stop syncing once the run is over: endRun cleared the meshes and a
+    // per-frame sync would resurrect them behind VICTORY/GAME_OVER.
+    if (state && !state.over) renderApi.syncState(state);
   }
 
   // ---------------------------------------------------------------------
@@ -533,6 +565,7 @@ export function createGame({ bus, states, save, input, renderApi }) {
       state.over = true;
       state.victory = false;
       stopWaveSpawning(state);
+      finalizeRunStats();
       bus.emit('run:end', {
         victory: false,
         runStats: state.runStats,

@@ -368,6 +368,49 @@
   line-height: 1.1;
 }
 
+.char-left {
+  flex: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  min-width: 0;
+  min-height: 0;
+}
+
+.char-left .char-grid {
+  flex: 1;
+}
+
+.armory-panel {
+  padding: 0.6em 0.9em;
+  max-height: clamp(90px, 16vh, 160px);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.armory-row .lock-hint {
+  font-size: 0.78em;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+.buy-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  flex-wrap: wrap;
+}
+
+.buy-feedback {
+  font-size: 0.82em;
+  color: var(--ink-dim);
+}
+
+.buy-feedback.deny {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .char-detail {
   flex: 1;
   display: flex;
@@ -571,6 +614,26 @@ input[type='range'] {
 
 .daily-meta b { color: var(--banana); }
 
+.daily-attempted {
+  color: var(--banana);
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------- challenges */
+
+.challenge-list {
+  flex: 1;
+  max-width: min(92vw, 760px);
+  margin: 0 auto;
+}
+
+.challenge-card { cursor: default; }
+
+.challenge-actions {
+  justify-content: flex-end;
+  margin-top: 0.5em;
+}
+
 /* --------------------------------------------------------------------- HUD */
 
 .hud {
@@ -664,6 +727,26 @@ input[type='range'] {
   font-size: 0.8em;
   color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
+}
+
+/* Active Chaos Run wave modifier (set from bus 'chaos:modifier'). */
+.chaos-badge {
+  background: rgba(10, 20, 12, 0.85);
+  border: 2px solid #c66bff;
+  color: #e3aaff;
+  border-radius: 999px;
+  padding: 0.2em 0.9em;
+  font-size: 0.78em;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.setting-note {
+  font-size: 0.75em;
+  color: var(--ink-dim);
+  font-style: italic;
+  margin-top: -0.4em;
 }
 
 .boss-bar-wrap {

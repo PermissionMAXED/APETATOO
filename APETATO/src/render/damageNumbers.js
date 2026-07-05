@@ -7,7 +7,7 @@
 // Feel contract:
 //   fontSize = 13 + 9 * log10(1 + amount) px
 //   rise 28px over 0.7s, pop-in scale 1.3 -> 1 in 80ms
-//   colors: normal #fff, crit #ffd23f (x1.4 size + 'CRIT' sparkle),
+//   colors: normal #fff, crit #ffd23f (x1.5 size + 'CRIT' sparkle),
 //           player #ff5544, heal #66ff88, poison #9be352, burn #ff9a3d
 //   merge hits on the same target within 60ms; cap 128 (drop smallest).
 
@@ -168,7 +168,7 @@ export function createDamageNumbers(canvas) {
       const isCrit = r.kind === 'crit';
       const pop = r.age < POP_T ? 1.3 - 0.3 * (r.age / POP_T) : 1;
       let px = (13 + 9 * Math.log10(1 + Math.abs(r.amount))) * pop;
-      if (isCrit) px *= 1.4;
+      if (isCrit) px *= 1.5;
       const alpha = r.age < LIFE * 0.6 ? 1 : 1 - (r.age - LIFE * 0.6) / (LIFE * 0.4);
 
       const text = r.amount >= 10 ? Math.round(r.amount) : Math.round(r.amount * 10) / 10;

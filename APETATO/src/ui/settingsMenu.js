@@ -97,6 +97,7 @@ export function createSettingsMenu(ctx) {
     shakeRow(panel);
     toggleRow(panel, 'Damage numbers', 'damageNumbers');
     toggleRow(panel, 'Show run timer', 'showTimer');
+    mount(panel, el('div', 'setting-note', 'The run timer is always shown in Daily and Endless.'));
 
     mount(panel, btn('◄ Back', 'autofocus', () => states.set(backTo, backTo === 'PAUSED' ? undefined : { from: 'SETTINGS' })));
 

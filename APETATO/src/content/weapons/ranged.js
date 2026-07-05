@@ -354,7 +354,7 @@ export const RANGED_WEAPONS = deepFreeze([
     behavior: 'projectile',
     behaviorParams: {},
     onHit: [
-      { trigger: 'onHit', chance: 60, do: [{ op: 'status', status: 'poison', dps: 4, duration: 3, target: 'target' }] },
+      { trigger: 'onHit', chance: 35, do: [{ op: 'status', status: 'poison', dps: 4, duration: 3, target: 'target' }] },
     ],
     visual: {
       projectile: 'dart',

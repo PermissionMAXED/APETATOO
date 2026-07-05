@@ -15,7 +15,7 @@
 // rerolls AND into the next wave. Sell = 70% of paid.
 
 import { Content } from '../content/registry.js';
-import { addItem, removeItemAt } from './player.js';
+import { addItem, removeItemAt, pushBuildLog } from './player.js';
 import { addWeapon, removeWeaponAt } from './weapons.js';
 import { gainCoins } from './pickups.js';
 
@@ -91,6 +91,15 @@ function itemWeight(state, player, shop, item) {
   return rarityWeight(state, player, item.rarity | 0) * (item.weight || 1);
 }
 
+/** Meta unlock gate: default weapons are always stockable, others need the
+ * save's unlocked.weapons list (threaded through state.save by run.js). */
+function weaponUnlocked(state, def) {
+  if (!def.unlock || def.unlock.type === 'default') return true;
+  const save = state.save;
+  const list = save && save.data && save.data.unlocked && save.data.unlocked.weapons;
+  return Array.isArray(list) && list.includes(def.id);
+}
+
 function weaponAllowed(state, player, def) {
   const rules = state.modeRules;
   const limit =
@@ -110,6 +119,7 @@ function weaponAllowed(state, player, def) {
 function weaponWeight(state, player, shop, def, targetTier) {
   if (alreadyOffered(shop, def)) return 0;
   if (((def.tier | 0) || 1) !== targetTier) return 0;
+  if (!weaponUnlocked(state, def)) return 0;
   if (!weaponAllowed(state, player, def)) return 0;
   return 1;
 }
@@ -149,7 +159,7 @@ function rollSlot(state, player, shop, slot) {
       def = state.rng.weightedPick(Content.weapons, WEAP_W);
     }
     WEAP_W_CTX.state = null;
-    if (def && weaponAllowed(state, player, def)) {
+    if (def && weaponUnlocked(state, def) && weaponAllowed(state, player, def)) {
       slot.kind = 'weapon';
       slot.def = def;
       slot.price = priceFor(state, player, def.basePrice, ((def.tier | 0) || 1) - 1);
@@ -235,7 +245,7 @@ export function buy(state, slotIdx) {
     if (res.weapon) res.weapon._paid = slot.price;
   } else {
     if (!addItem(state, player, slot.def, slot.price)) return false;
-    state.runStats.buildLog.push({ wave: state.wave, kind: 'item', id: slot.def.id });
+    pushBuildLog(state, { wave: state.wave, kind: 'item', id: slot.def.id });
   }
 
   state.coins -= slot.price;

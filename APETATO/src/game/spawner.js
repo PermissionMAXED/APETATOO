@@ -9,8 +9,9 @@
 // Enemy scaling: hp  *= 1 + 0.22*(w-1) + 0.012*(w-1)^2
 //                dmg *= 1 + 0.09*(w-1)
 //                spd *= min(1.25, 1 + 0.005*w)
-// all * mode mults, hp/dmg * (1 + curse/100); endless waves past the final
-// additionally * 1.08^(wave - finalWave) on hp/dmg.
+// all * mode mults, hp * (1 + curse/100) (curse never scales damage, so
+// curse items trade risk for reward instead of being a pure trap); endless
+// waves past the final additionally * 1.08^(wave - finalWave) on hp/dmg.
 
 import { Content } from '../content/registry.js';
 import { acquire } from './entities.js';
@@ -32,7 +33,7 @@ export function computeEnemyScale(state) {
   const curse = 1 + ((state.players[0] && state.players[0].stats.curse) || 0) / 100;
 
   let hp = (1 + 0.22 * (w - 1) + 0.012 * (w - 1) * (w - 1)) * (rules.enemyHpMult || 1) * curse;
-  let dmg = (1 + 0.09 * (w - 1)) * (rules.enemyDmgMult || 1) * curse;
+  let dmg = (1 + 0.09 * (w - 1)) * (rules.enemyDmgMult || 1); // curse: hp only
   let spd = Math.min(1.25, 1 + 0.005 * w) * ((arena.modifiers && arena.modifiers.enemySpeedMult) || 1);
 
   if (state.chaosMod) {

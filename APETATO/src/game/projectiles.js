@@ -9,7 +9,7 @@
 // canonical.
 
 import { TAU } from '../core/mathx.js';
-import { acquire, release, rememberHit, hasHit } from './entities.js';
+import { acquire, release, rememberHit, hasHit, HIT_MEMORY } from './entities.js';
 import {
   applyWeaponHit,
   rollWeaponDamage,
@@ -304,6 +304,19 @@ function hitPlayers(state, p) {
 }
 
 function hitEnemies(state, p) {
+  // Boomerangs dedupe purely via hit memory; when it saturates, hasHit would
+  // start returning false and re-hit every overlapping enemy each step. Force
+  // the return leg (fresh memory) instead — or retire the projectile if the
+  // return leg saturates too.
+  if (p.ptype === 'boomerang' && p.hitMemCount >= HIT_MEMORY) {
+    if (p.phase === 0) {
+      p.phase = 1;
+      p.hitMemCount = 0;
+    } else {
+      release(state.stores.projectiles, p);
+      return;
+    }
+  }
   const n = state.hash.query(p.x, p.z, p.radius, HIT_Q);
   for (let i = 0; i < n; i++) {
     const ent = HIT_Q[i];
@@ -318,7 +331,7 @@ function hitEnemies(state, p) {
         p.chainLeft--;
         p.mult *= 0.8; // -20% damage per hop
         const params = (p.weaponRef && p.weaponRef.def.behaviorParams) || {};
-        const jumpRange = params.jumpRange || 4;
+        const jumpRange = params.jumpRange || params.chainRange || 4;
         const next = nearestUnhit(state, p, ent.x, ent.z, jumpRange);
         if (next) {
           const dx = next.x - p.x;

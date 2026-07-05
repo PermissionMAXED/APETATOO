@@ -7,6 +7,8 @@
 //   floor(wave*2 + kills/50 + bossesKilled*15) * (hardcore ? 2 : 1)
 //                                              * (custom ? 0 : 1)
 // hardcore/custom come from resolveRules() on the cached run:start modeId.
+// Abandoned runs (payload.abandoned) pay 0 bananas — quitting from the pause
+// menu must never be a farming shortcut.
 
 import { Content } from '../content/registry.js';
 import { resolveRules } from './modesLogic.js';
@@ -118,14 +120,18 @@ export function initMeta({ bus, save }) {
     const wave = Number(p.wave ?? runStats.wave) || 0;
     const kills = Number(runStats.kills) || 0;
     const bossesKilled = Number(runStats.bossesKilled) || 0;
+    const abandoned = !!p.abandoned;
 
     const modeId = (lastRunStart && lastRunStart.modeId) || 'classic';
     const rules = resolveRules(modeId, lastRunStart && lastRunStart.customRules);
 
-    const bananas =
-      Math.floor(wave * 2 + kills / 50 + bossesKilled * 15) *
-      (rules.hardcore ? 2 : 1) *
-      (rules.custom ? 0 : 1);
+    // Abandoned runs pay nothing (they also never carry victory:true, so
+    // they can't count as wins — see game/run.js abandonRun()).
+    const bananas = abandoned
+      ? 0
+      : Math.floor(wave * 2 + kills / 50 + bossesKilled * 15) *
+        (rules.hardcore ? 2 : 1) *
+        (rules.custom ? 0 : 1);
 
     save.data.goldenBananas += bananas;
     save.persist();
@@ -144,6 +150,7 @@ export function initMeta({ bus, save }) {
         mode: modeId,
         arena: p.arenaId || (lastRunStart && lastRunStart.arenaId) || '',
         goldenBananas: bananas,
+        abandoned,
       });
     }
 

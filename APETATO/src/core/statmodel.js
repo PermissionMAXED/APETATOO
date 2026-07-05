@@ -37,10 +37,10 @@ export const STAT_KEYS = Object.freeze([
 
 const KEY_SET = new Set(STAT_KEYS);
 
-/** Baseline every ape starts from: 15 HP of pure banana grit, 0 elsewhere. */
+/** Baseline every ape starts from: 18 HP of pure banana grit, 0 elsewhere. */
 export const BASE_STATS = Object.freeze(
   STAT_KEYS.reduce((acc, k) => {
-    acc[k] = k === 'maxHp' ? 15 : 0;
+    acc[k] = k === 'maxHp' ? 18 : 0;
     return acc;
   }, {})
 );
@@ -125,9 +125,9 @@ export function moveSpeed(stats) {
   return 5.2 * (1 + stats.speed / 100);
 }
 
-/** Pickup magnet radius from the pickupRange stat. */
+/** Pickup magnet radius from the pickupRange stat (base = CONFIG.PLAYER.basePickup). */
 export function pickupRadius(stats) {
-  return 1.5 * (1 + stats.pickupRange / 100);
+  return 2.2 * (1 + stats.pickupRange / 100);
 }
 
 export const DERIVED = Object.freeze({
@@ -143,20 +143,20 @@ export const DERIVED = Object.freeze({
  */
 export function selfTest() {
   if (STAT_KEYS.length !== 28) throw new Error(`statmodel: expected 28 keys, got ${STAT_KEYS.length}`);
-  if (BASE_STATS.maxHp !== 15) throw new Error('statmodel: BASE_STATS.maxHp must be 15');
+  if (BASE_STATS.maxHp !== 18) throw new Error('statmodel: BASE_STATS.maxHp must be 18');
   for (const k of STAT_KEYS) {
     if (k !== 'maxHp' && BASE_STATS[k] !== 0) throw new Error(`statmodel: BASE_STATS.${k} must be 0`);
   }
 
   // Plain summation.
   let s = computeStats([{ maxHp: 5, luck: 10 }, { luck: -4, armor: 3 }]);
-  if (s.maxHp !== 20 || s.luck !== 6 || s.armor !== 3 || s.curse !== 0) {
+  if (s.maxHp !== 23 || s.luck !== 6 || s.armor !== 3 || s.curse !== 0) {
     throw new Error('statmodel: summation failed');
   }
 
   // Stacked item mods.
   s = computeStats([{ mods: { maxHp: 2, harvesting: 1 }, stacks: 3 }]);
-  if (s.maxHp !== 21 || s.harvesting !== 3) throw new Error('statmodel: stacks failed');
+  if (s.maxHp !== 24 || s.harvesting !== 3) throw new Error('statmodel: stacks failed');
 
   // Caps.
   s = computeStats([{ dodge: 90, lifesteal: 100, attackSpeed: 500, speed: 250, extraProjectiles: 9 }]);
@@ -173,13 +173,13 @@ export function selfTest() {
   console.warn = () => {};
   s = computeStats([{ bananaPower: 999, maxHp: 1 }]);
   console.warn = prevWarn;
-  if (s.maxHp !== 16 || 'bananaPower' in s === true) throw new Error('statmodel: unknown key handling failed');
+  if (s.maxHp !== 19 || 'bananaPower' in s === true) throw new Error('statmodel: unknown key handling failed');
 
   // Empty / missing sources -> pure base.
   s = computeStats([]);
-  if (s.maxHp !== 15) throw new Error('statmodel: empty sources failed');
+  if (s.maxHp !== 18) throw new Error('statmodel: empty sources failed');
   s = computeStats();
-  if (s.maxHp !== 15) throw new Error('statmodel: no-arg failed');
+  if (s.maxHp !== 18) throw new Error('statmodel: no-arg failed');
 
   // Out-param reuse.
   const reused = {};
@@ -191,7 +191,7 @@ export function selfTest() {
   if (armorReduction(0) !== 0) throw new Error('statmodel: armorReduction(0) failed');
   if (effectiveCooldown(1.2, 100) !== 0.6) throw new Error('statmodel: effectiveCooldown failed');
   if (Math.abs(moveSpeed({ speed: 50 }) - 7.8) > 1e-9) throw new Error('statmodel: moveSpeed failed');
-  if (Math.abs(pickupRadius({ pickupRange: 100 }) - 3) > 1e-9) throw new Error('statmodel: pickupRadius failed');
+  if (Math.abs(pickupRadius({ pickupRange: 100 }) - 4.4) > 1e-9) throw new Error('statmodel: pickupRadius failed');
   if (DERIVED.armorReduction !== armorReduction) throw new Error('statmodel: DERIVED bundle mismatch');
 
   return true;

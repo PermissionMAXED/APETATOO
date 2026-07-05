@@ -1,10 +1,18 @@
 // APETATO ui/modeSelect — pick mode + arena, tweak a Custom Run, then start.
-// Receives { characterId } via the MODE_SELECT state payload.
+// Receives { characterId, modeId? } via the MODE_SELECT state payload
+// (modeId preselects a mode — used by the Challenges screen flow).
+//
+// Daily runs are seeded with meta/daily.js dailySeed() (hashed UTC date), so
+// every player on the planet shares today's seed; the UTC todayKey() from
+// meta/daily.js is used for the label + storage lookups (NOT the local-time
+// key in ui/dom.js). Once today is attempted, further daily starts become
+// practice runs (customRules.practice=true → daily.js skips submission).
 
 import {
-  el, mount, clear, btn, todayKey, fmtInt, unlockHint, contentList, contentById,
+  el, mount, clear, btn, fmtInt, unlockHint, contentList, contentById,
 } from './dom.js';
 import { Content } from '../content/registry.js';
+import { todayKey, dailySeed, isDailyAttempted } from '../meta/daily.js';
 
 export function createModeSelect(ctx) {
   const { states, save, game, nav, session } = ctx;
@@ -79,20 +87,19 @@ export function createModeSelect(ctx) {
 
   function dailyBest() {
     const daily = save && save.data && save.data.daily;
-    const entry = daily ? daily[todayKey()] : null;
-    const entries = Array.isArray(entry)
-      ? entry
-      : entry && Array.isArray(entry.entries)
-        ? entry.entries
-        : entry && typeof entry === 'object'
-          ? [entry]
-          : [];
+    const day = daily ? daily[todayKey()] : null;
+    // daily.js stores save.data.daily[key] = { scores: [...], attempted }.
+    const entries = day && Array.isArray(day.scores) ? day.scores : Array.isArray(day) ? day : [];
     let best = null;
     for (const e of entries) {
       const score = e && typeof e.score === 'number' ? e.score : null;
       if (score !== null && (best === null || score > best)) best = score;
     }
     return best;
+  }
+
+  function dailyIsPractice() {
+    return !!(save && isDailyAttempted(save));
   }
 
   function selectMode(id) {
@@ -102,6 +109,7 @@ export function createModeSelect(ctx) {
     if (startBtn) {
       const def = contentById(Content, 'modes', id);
       startBtn.disabled = !def || !isModeUnlocked(def);
+      startBtn.textContent = id === 'daily' && dailyIsPractice() ? 'Practice Run ►' : 'Start Run ►';
     }
   }
 
@@ -151,7 +159,12 @@ export function createModeSelect(ctx) {
         weaponSlots: custom.weaponSlots,
       };
     } else if (selectedModeId === 'daily') {
-      cfg.seed = todayKey();
+      // Globally-shared seed: every player gets the same run today.
+      cfg.seed = dailySeed();
+      if (dailyIsPractice()) {
+        // Already attempted today — this run is practice (no score submit).
+        cfg.customRules = { practice: true };
+      }
     }
 
     session.lastRunConfig = cfg;
@@ -196,14 +209,19 @@ export function createModeSelect(ctx) {
 
       if (def.id === 'daily' && unlocked) {
         const best = dailyBest();
-        const meta = mount(card, el('div', 'mode-rules daily-meta'));
-        const b1 = el('b', '', todayKey());
-        meta.append('Today: ');
-        meta.appendChild(b1);
-        meta.append(' · seed ');
-        meta.appendChild(el('b', '', todayKey()));
-        meta.append(' · best ');
-        meta.appendChild(el('b', '', best === null ? '—' : fmtInt(best)));
+        const info = mount(card, el('div', 'mode-rules daily-meta'));
+        info.append('Today (UTC): ');
+        info.appendChild(el('b', '', todayKey()));
+        info.append(' · seed ');
+        info.appendChild(el('b', '', String(dailySeed())));
+        info.append(' · best ');
+        info.appendChild(el('b', '', best === null ? '—' : fmtInt(best)));
+        if (dailyIsPractice()) {
+          mount(card, el(
+            'div', 'mode-rules daily-attempted',
+            '✓ Attempted today — further runs are Practice (not scored)'
+          ));
+        }
       }
 
       card.addEventListener('click', () => {
@@ -278,10 +296,15 @@ export function createModeSelect(ctx) {
     hints.append(' Back ');
     mount(hints, el('b', '', 'Esc'));
 
+    // Payload modeId (challenge flow) wins when unlocked, then Classic.
+    const wanted = payload && payload.modeId;
+    const wantedOk = wanted && modeCards.has(wanted) && isModeUnlocked(contentById(Content, 'modes', wanted));
     selectMode(
-      firstPlayable && modeCards.has('classic') && isModeUnlocked(contentById(Content, 'modes', 'classic'))
-        ? 'classic'
-        : firstPlayable
+      wantedOk
+        ? wanted
+        : firstPlayable && modeCards.has('classic') && isModeUnlocked(contentById(Content, 'modes', 'classic'))
+          ? 'classic'
+          : firstPlayable
     );
     selectArena(firstArena);
 

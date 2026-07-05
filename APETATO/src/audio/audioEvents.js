@@ -6,7 +6,7 @@
 // The bus is injected by initAudio() — this module never imports it, so the
 // file parses and runs standalone (initAudioEvents without a bus is a no-op).
 
-import { playSfx } from './sfx.js';
+import { playSfx, play, SFX } from './sfx.js';
 import { setTrack, setIntensity } from './music.js';
 
 function nowSec() {
@@ -42,6 +42,20 @@ function shootFor(behavior) {
   if (b === 'lobbed' || b === 'explosive') return 'shoot_heavy';
   return 'shoot_pluck'; // orbit, homing, chain, boomerang, pets, turrets...
 }
+
+// --- xp pickup pitch ramp (Vampire-Survivors style) --------------------------
+// Rapid successive xp pickups climb in pitch; ~0.6s without one resets the
+// ramp. The combo counts EVERY collect event (even ones the 15/s throttle
+// mutes) so a dense xp stream keeps climbing audibly instead of flatlining.
+const XP_COMBO_WINDOW = 0.6; // idle seconds before the ramp resets
+const XP_COMBO_MAX = 12; // caps the climb at ~2x base pitch
+const XP_PITCH_STEP = 1.06; // ~one semitone per rapid pickup
+const XP_BASE_FREQ = SFX.pickup_xp.freq;
+const XP_BASE_FREQ_END = SFX.pickup_xp.freqEnd;
+// Mutable copy of the recipe (SFX map is shared); low jitter so the ramp reads.
+const xpRecipe = Object.assign({}, SFX.pickup_xp, { freqJitter: 0.03 });
+let xpCombo = 0;
+let xpLastAt = -Infinity;
 
 let wired = false;
 
@@ -99,8 +113,19 @@ export function initAudioEvents({ bus } = {}) {
 
   // -- pickups / progression -----------------------------------------------
   bus.on('pickup:collect', (p) => {
-    if (!pickupTb()) return;
     const t = String((p && p.ptype) || '');
+    if (t === 'xp') {
+      const now = nowSec();
+      xpCombo = now - xpLastAt <= XP_COMBO_WINDOW ? Math.min(XP_COMBO_MAX, xpCombo + 1) : 0;
+      xpLastAt = now;
+      if (!pickupTb()) return;
+      const ratio = Math.pow(XP_PITCH_STEP, xpCombo);
+      xpRecipe.freq = XP_BASE_FREQ * ratio;
+      xpRecipe.freqEnd = XP_BASE_FREQ_END * ratio;
+      play(xpRecipe);
+      return;
+    }
+    if (!pickupTb()) return;
     playSfx(t.indexOf('coin') !== -1 || t === 'gold' ? 'pickup_coin' : 'pickup_xp');
   });
   bus.on('player:levelup', () => playSfx('levelup'));

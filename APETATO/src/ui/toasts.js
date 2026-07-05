@@ -1,6 +1,7 @@
 // APETATO ui/toasts — bottom-right notification queue.
-// Listens forever on bus 'achievement:unlock' {id} and 'unlock:new'
-// {kind, id}; each toast lives ~4s and they stack upward.
+// Listens forever on bus 'achievement:unlock' {id}, 'unlock:new' {kind, id}
+// and 'chaos:modifier' {id, name, description}; each toast lives ~4s and
+// they stack upward.
 
 import { el, mount, contentById } from './dom.js';
 import { Content } from '../content/registry.js';
@@ -71,6 +72,13 @@ export function initToasts(ctx, layer) {
     if (!id) return;
     const pretty = String(kind).replace(/s$/, '');
     show('🔓 New ' + pretty, unlockName(kind, id), '');
+  });
+
+  // Chaos Run rolls a modifier each wave — make sure players actually see it
+  // (the HUD also shows a persistent badge; this is the loud announcement).
+  bus.on('chaos:modifier', (payload) => {
+    if (!payload || !payload.name) return;
+    show('🌀 Chaos modifier', payload.name, payload.description || '');
   });
 
   return { show };

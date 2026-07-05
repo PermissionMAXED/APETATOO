@@ -55,7 +55,7 @@ export function createPlayer(state, index, character) {
     kbX: 0,
     kbZ: 0,
     _itemSources: new Map(), // itemId -> { mods, stacks }
-    _upgradeSources: [], // permanent level-up picks: { mods }
+    _upgradeSources: { mods: {} }, // permanent level-up picks folded into one source
     _earned: { mods: {} }, // permanent trigger-time stat ops
     _levelSource: { mods: { maxHp: 0 } }, // +1 maxHp per level
     _synSources: new Map(), // classId -> { mods }
@@ -66,7 +66,7 @@ export function createPlayer(state, index, character) {
     _hazardSlow: 0,
     _regenAcc: 0,
     itemsOrder: [], // stable order for sell-by-index
-    itemPaid: new Map(), // itemId -> last paid price
+    itemPaid: new Map(), // itemId -> FIFO array of per-stack paid prices
   };
   if (character && Array.isArray(character.passives)) {
     registerOwner(player, 'char:' + (character.id || index), character.passives);
@@ -82,7 +82,7 @@ function rebuildSources(player) {
   if (player.character && player.character.statMods) src.push(player.character.statMods);
   src.push(player._levelSource);
   for (const s of player._itemSources.values()) src.push(s);
-  for (let i = 0; i < player._upgradeSources.length; i++) src.push(player._upgradeSources[i]);
+  src.push(player._upgradeSources);
   src.push(player._earned);
   for (let i = 0; i < player.buffs.length; i++) src.push(player.buffs[i]);
   for (const s of player._synSources.values()) src.push(s);
@@ -120,6 +120,16 @@ export function recomputeStats(state, player) {
 
 export function markSourcesDirty(player) {
   player._sourcesDirty = true;
+}
+
+const BUILD_LOG_MAX = 200; // endless runs: keep only the newest entries
+
+/** Append to runStats.buildLog, trimming old entries to bound memory. */
+export function pushBuildLog(state, entry) {
+  const log = state.runStats && state.runStats.buildLog;
+  if (!log) return;
+  log.push(entry);
+  if (log.length > BUILD_LOG_MAX) log.splice(0, log.length - BUILD_LOG_MAX);
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +188,12 @@ export function addItem(state, player, itemDef, paidPrice) {
   } else {
     src.stacks = cur + 1;
   }
-  if (paidPrice !== undefined) player.itemPaid.set(id, paidPrice);
+  let paidArr = player.itemPaid.get(id);
+  if (!paidArr) {
+    paidArr = [];
+    player.itemPaid.set(id, paidArr);
+  }
+  paidArr.push(paidPrice !== undefined ? paidPrice : 0);
   recomputeStats(state, player);
   ITEM_EV.id = id;
   ITEM_EV.rarity = RARITY_NAMES[Math.max(0, Math.min(4, itemDef.rarity | 0))];
@@ -197,10 +212,12 @@ export function removeItemAt(state, player, orderIdx) {
   if (!id) return null;
   const cur = player.items.get(id) || 0;
   if (cur <= 0) return null;
-  const paid = player.itemPaid.get(id) || 0;
+  const paidArr = player.itemPaid.get(id);
+  const paid = paidArr && paidArr.length > 0 ? paidArr.shift() : 0; // FIFO per-stack refund
   if (cur === 1) {
     player.items.delete(id);
     player._itemSources.delete(id);
+    player.itemPaid.delete(id);
     player.itemsOrder.splice(orderIdx, 1);
     unregisterOwner('item:' + id);
     player._sourcesDirty = true;

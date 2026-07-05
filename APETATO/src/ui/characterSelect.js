@@ -1,15 +1,20 @@
 // APETATO ui/characterSelect — pick your ape.
 // Grid of all characters (locked ones show a silhouette + unlock hint), with
 // a detail panel: live 3D model preview (renderApi.buildPreview), stat mods,
-// passive descriptions, and the starting weapon.
+// passive descriptions, and the starting weapon. Buy-gated apes get a
+// "Buy for N 🍌" button (golden bananas, via meta.buyUnlock), and a compact
+// Armory strip below the grid sells buy-gated weapon unlocks the same way.
+//
+// Mount payload (optional): { modeId, from } — set by the Challenges screen
+// so Continue preselects that mode and Back returns to Challenges.
 
 import {
-  el, mount, clear, btn, statModsList, unlockHint, contentList, contentById,
+  el, mount, clear, btn, fmtInt, statModsList, unlockHint, contentList, contentById,
 } from './dom.js';
 import { Content } from '../content/registry.js';
 
 export function createCharacterSelect(ctx) {
-  const { states, save, renderApi, nav } = ctx;
+  const { bus, states, save, renderApi, meta, nav } = ctx;
 
   let screen = null;
   let disposePreview = null;
@@ -17,6 +22,8 @@ export function createCharacterSelect(ctx) {
   let cardsById = new Map();
   let detail = null;
   let continueBtn = null;
+  let rootEl = null;
+  let lastPayload = null;
 
   function unlockedSet() {
     const ids = new Set();
@@ -76,6 +83,45 @@ export function createCharacterSelect(ctx) {
     return `${when}: ${chance}${actions || 'something wonderful happens'}`;
   }
 
+  function goldenBananas() {
+    return (save && save.data && Number(save.data.goldenBananas)) || 0;
+  }
+
+  /**
+   * Rebuild the whole screen in place (after a purchase) and restore the
+   * selection + keyboard focus. unlockedSet() re-reads the save, so newly
+   * bought entries render (and become selectable) immediately.
+   */
+  function rebuild(keepId, focusUiId) {
+    const root = rootEl;
+    const payload = lastPayload;
+    unmount();
+    mountScreen(root, payload);
+    if (keepId) select(keepId);
+    const target =
+      (focusUiId && screen && screen.querySelector(`[data-ui-id="${focusUiId}"]`)) ||
+      (keepId && cardsById.get(keepId)) || null;
+    if (target && !target.disabled) target.focus({ preventScroll: false });
+  }
+
+  /**
+   * Spend golden bananas on a buy-gated unlock via meta.buyUnlock.
+   * On failure (not enough bananas / no meta wired) pings 'ui:deny' and
+   * shows inline feedback next to the triggering button.
+   */
+  function tryBuy(kind, id, feedbackEl, focusUiId) {
+    const ok = !!(meta && typeof meta.buyUnlock === 'function' && meta.buyUnlock(kind, id));
+    if (ok) {
+      rebuild(kind === 'characters' ? id : selectedId, focusUiId);
+      return;
+    }
+    if (bus) bus.emit('ui:deny', { kind, id });
+    if (feedbackEl) {
+      feedbackEl.textContent = 'Not enough golden bananas!';
+      feedbackEl.classList.add('deny');
+    }
+  }
+
   function select(id) {
     selectedId = id;
     for (const [cid, card] of cardsById) card.classList.toggle('selected', cid === id);
@@ -114,7 +160,23 @@ export function createCharacterSelect(ctx) {
     }
 
     if (!isUnlocked) {
-      mount(detail, el('div', 'passive-line', `🔒 ${unlockHint(def.unlock) || 'Locked'}`));
+      const unlock = def.unlock || {};
+      if (unlock.type === 'buy') {
+        // Spendable unlock: show the price + a live Buy button.
+        const cost = Number(unlock.cost) || 0;
+        const row = mount(detail, el('div', 'buy-row'));
+        const buyBtn = mount(row, btn(`Buy for ${cost} 🍌`, 'primary', () => {
+          tryBuy('characters', def.id, feedback, 'char_' + def.id);
+        }));
+        buyBtn.dataset.uiId = 'buy_char_' + def.id;
+        buyBtn.disabled = goldenBananas() < cost;
+        const feedback = mount(row, el('div', 'buy-feedback',
+          goldenBananas() < cost ? `You have ${fmtInt(goldenBananas())} 🍌` : ''));
+        if (goldenBananas() < cost) feedback.classList.add('deny');
+      } else {
+        // wins / achievement gated: hint only, nothing to buy.
+        mount(detail, el('div', 'passive-line', `🔒 ${unlockHint(def.unlock) || 'Locked'}`));
+      }
     }
 
     mount(detail, el('div', 'detail-desc', def.description || ''));
@@ -138,14 +200,69 @@ export function createCharacterSelect(ctx) {
     if (continueBtn) continueBtn.disabled = !isUnlocked;
   }
 
-  function mountScreen(root) {
+  /** Compact strip of meta-unlockable (non-default) weapons below the grid. */
+  function buildArmory(parent) {
+    const gated = contentList(Content, 'weapons').filter(
+      (w) => w && w.unlock && w.unlock.type !== 'default'
+    );
+    if (gated.length === 0) return;
+
+    const unlockedWeapons = new Set(
+      save && save.data && save.data.unlocked && Array.isArray(save.data.unlocked.weapons)
+        ? save.data.unlocked.weapons
+        : []
+    );
+
+    const panel = mount(parent, el('div', 'panel armory-panel'));
+    mount(panel, el('div', 'detail-section-title', 'Armory — weapon unlocks'));
+
+    for (const def of gated) {
+      const owned = unlockedWeapons.has(def.id);
+      const row = mount(panel, el('div', 'owned-weapon armory-row'));
+      mount(row, el('span', 'wn', (owned ? '✓ ' : '') + (def.name || def.id)));
+      if (owned) {
+        mount(row, el('span', 'tier', 'Unlocked'));
+      } else if (def.unlock.type === 'buy') {
+        const cost = Number(def.unlock.cost) || 0;
+        const buyBtn = mount(row, btn(`Buy for ${cost} 🍌`, 'sell-btn', () => {
+          tryBuy('weapons', def.id, null, 'buy_weapon_' + def.id);
+        }));
+        buyBtn.dataset.uiId = 'buy_weapon_' + def.id;
+        buyBtn.disabled = goldenBananas() < cost;
+        if (buyBtn.disabled) buyBtn.title = `Not enough golden bananas (you have ${fmtInt(goldenBananas())})`;
+      } else {
+        mount(row, el('span', 'lock-hint', `🔒 ${unlockHint(def.unlock) || 'Locked'}`));
+      }
+    }
+  }
+
+  function mountScreen(root, payload) {
+    rootEl = root;
+    lastPayload = payload || null;
+    const modeId = lastPayload && lastPayload.modeId;
+    const backTarget = lastPayload && lastPayload.from === 'CHALLENGES'
+      ? () => states.set('MODE_SELECT', { uiScreen: 'challenges' })
+      : () => states.set('MENU');
+
     screen = mount(root, el('div', 'ui-screen'));
     cardsById = new Map();
 
+    // Golden banana balance, top-right (rebuilt from the save after buys).
+    const balance = mount(screen, el('div', 'banana-balance golden'));
+    mount(balance, el('span', 'banana-icon'));
+    mount(balance, el('span', '', fmtInt(goldenBananas())));
+    balance.title = 'Golden Bananas';
+
     mount(screen, el('div', 'screen-heading', 'Choose your ape'));
+    if (modeId) {
+      const modeDef = contentById(Content, 'modes', modeId);
+      mount(screen, el('div', 'screen-sub', `Challenge: ${modeDef ? modeDef.name : modeId}`));
+    }
 
     const body = mount(screen, el('div', 'screen-body'));
-    const grid = mount(body, el('div', 'char-grid'));
+    const leftCol = mount(body, el('div', 'char-left'));
+    const grid = mount(leftCol, el('div', 'char-grid'));
+    buildArmory(leftCol);
     const detailPanel = mount(body, el('div', 'panel char-detail'));
     detail = detailPanel;
 
@@ -173,10 +290,12 @@ export function createCharacterSelect(ctx) {
     }
 
     const actions = mount(screen, el('div', 'screen-actions'));
-    mount(actions, btn('◄ Back', '', () => states.set('MENU')));
+    mount(actions, btn('◄ Back', '', backTarget));
     continueBtn = mount(actions, btn('Continue ►', 'primary big', () => {
       if (selectedId && unlockedSet().has(selectedId)) {
-        states.set('MODE_SELECT', { characterId: selectedId });
+        const next = { characterId: selectedId };
+        if (modeId) next.modeId = modeId; // challenge flow: preselect the mode
+        states.set('MODE_SELECT', next);
       }
     }));
 
@@ -194,7 +313,7 @@ export function createCharacterSelect(ctx) {
     const selCard = cardsById.get(selectedId);
     if (selCard) selCard.classList.add('autofocus');
 
-    nav.setBack(() => states.set('MENU'));
+    nav.setBack(backTarget);
   }
 
   function unmount() {

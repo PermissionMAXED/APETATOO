@@ -11,7 +11,7 @@ import { DERIVED } from '../core/statmodel.js';
 import { CONFIG } from '../core/config.js';
 import { Content } from '../content/registry.js';
 import { acquire, release } from './entities.js';
-import { healPlayer, addItem } from './player.js';
+import { healPlayer, addItem, pushBuildLog } from './player.js';
 import { grantXp } from './levelup.js';
 import { fireTriggerFast } from './effects.js';
 
@@ -162,7 +162,7 @@ function collect(state, player, p) {
       const item = randomCrateItem(state);
       if (item) {
         addItem(state, player, item);
-        state.runStats.buildLog.push({ wave: state.wave, kind: 'crate-item', id: item.id });
+        pushBuildLog(state, { wave: state.wave, kind: 'crate-item', id: item.id });
       }
       fireTriggerFast('onPickupCoin', player, state, null, CRATE_COINS, null);
       break;
